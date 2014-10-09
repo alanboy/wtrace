@@ -1,0 +1,25 @@
+
+all: clean bin build_test 
+	echo done!
+
+bin: src\debugger.cpp
+	cd bin
+	cl /Zi \
+	/EHsc \
+	..\src\debugger.cpp  \
+	/FeDebugger \
+	/I"C:\Program Files (x86)\Windows Kits\8.1\Include\um" \
+	/DEBUG  \
+	"C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64\ntdll.lib"
+	cd ..
+
+build_test: src\debugme.cpp
+	cd test
+	cl /Zi ..\src\debugme.cpp /FeDebugMe
+	cd ..
+
+
+clean:
+	del /s/q bin\*
+	del /s/q test\*
+
