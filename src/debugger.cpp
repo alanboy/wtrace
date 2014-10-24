@@ -10,6 +10,8 @@
 #define UNICODE 
 
 
+BOOL GetFileNameFromHandle(HANDLE hFile);
+
 enum class WriteLevel
 {
 	Debug = 0,
@@ -353,13 +355,7 @@ int main(int argc, char ** argv)
 				 // with CloseHandle.
 					Write(WriteLevel::Debug, L"LOAD_DLL_DEBUG_EVENT");
 
-					/*CStringA sDLLName;
-				    sDLLName = GetFileNameFromHandle(de.u.LoadDll.hFile);
-
-				    DWORD64 dwBase = SymLoadModule64 (m_cProcessInfo.hProcess, NULL, sDLLName, 0, (DWORD64)de.u.LoadDll.lpBaseOfDll, 0);
-
-				    Write(WriteLevel::Debug, "Loaded DLL '%s' at add	ess %x.", sDLLName, de.u.LoadDll.lpBaseOfDll);  
-					*/
+					GetFileNameFromHandle(de.u.LoadDll.hFile);
 
 					break;
 		 
