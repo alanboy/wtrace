@@ -8,11 +8,20 @@ bin: src\debugger.cpp
 	cl /Zi \
 	/EHsc \
 	..\src\debugger.cpp  \
-	/FeDebugger \
+	/Fewtrace \
 	/I"C:\Program Files (x86)\Windows Kits\8.1\Include\um" \
 	/DEBUG  \
 	"C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64\ntdll.lib"
 	cd ..
+
+publish: bin\wtrace.exe bin\wtrace.pdb bin\vc120.pdb
+	copy bin\*.exe latest
+	copy bin\*.pdb latest
+	echo Built by : > latest\readme.txt
+	whoami >> latest\readme.txt
+	time /t >> latest\readme.txt
+	date /t >> latest\readme.txt
+
 
 clean:
 	IF EXIST bin del bin /s/q bin\* && rd bin
