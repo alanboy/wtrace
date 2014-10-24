@@ -1,5 +1,5 @@
 
-all: clean bin build_test 
+all: clean bin
 	echo done!
 
 bin: src\debugger.cpp
@@ -14,14 +14,6 @@ bin: src\debugger.cpp
 	"C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64\ntdll.lib"
 	cd ..
 
-build_test: src\debugme.cpp
-	IF NOT EXIST test mkdir test
-	cd test
-	cl /Zi ..\src\debugme.cpp /FeDebugMe
-	cd ..
-
-
 clean:
 	IF EXIST bin del bin /s/q bin\* && rd bin
-	IF EXIST test del test /s/q test\* && rd test
 
