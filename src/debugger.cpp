@@ -6,6 +6,8 @@
 #include <Winternl.h>
 
 #define SUCCESS(x) (x=!0)
+#define _UNICODE
+#define UNICODE 
 
 
 enum class WriteLevel
@@ -144,6 +146,14 @@ void ParseCommandLine(int argc, char ** argv)
 	
 }
 
+static wchar_t* charToWChar(const char* text)
+{
+    size_t size = strlen(text) + 1;
+    wchar_t* wa = new wchar_t[size];
+    mbstowcs(wa,text,size);
+    return wa;
+}
+
 int main(int argc, char ** argv)
 {
 	BYTE cInstruction;
@@ -161,7 +171,7 @@ int main(int argc, char ** argv)
 
 	ParseCommandLine(argc, argv);
 
-	LPTSTR processName = new TCHAR[MAX_PATH];
+	LPWSTR processName = new WCHAR[MAX_PATH];
 	DWORD processNameLen;
 
 	// Ref count of processes created
@@ -170,8 +180,10 @@ int main(int argc, char ** argv)
 	memset(&si, 0, sizeof(si));
 	memset(&pi, 0, sizeof(pi));
 
-	Write(WriteLevel::Debug, L"Creating process %s", gpCommandLine);
-	printf( "Creating process %s", gpCommandLine);
+	// gpCommandLine is char*, Write() needs wchar_t*
+	wchar_t *pwstrCommandLine;
+	pwstrCommandLine = charToWChar(gpCommandLine);
+	Write(WriteLevel::Debug, L"Creating process %s", pwstrCommandLine);
 
 	bool bCreateProcRes;
 	bCreateProcRes = CreateProcess(NULL, gpCommandLine, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
@@ -283,9 +295,9 @@ int main(int argc, char ** argv)
 
 					nSpawnedProcess++;
 
-					processNameLen = GetFinalPathNameByHandle(
+					processNameLen = GetFinalPathNameByHandleW(
 								de.u.CreateProcessInfo.hFile,//_In_   HANDLE hFile,
-								processName,//_Out_  LPTSTR lpszFilePath,
+								processName,//_Out_  LPWTSTR lpszFilePath,
 								MAX_PATH,//_In_   DWORD cchFilePath,
 								0//_In_   DWORD dwFlags
 								);
