@@ -7,8 +7,10 @@ bin: src\debugger.cpp
 	cd bin
 	cl /Zi \
 	/EHsc \
+	..\src\Main.cpp  \
 	..\src\debugger.cpp  \
-	..\src\FileFromHandle.cpp  \
+	..\src\Output.cpp  \
+	..\src\Utils.cpp  \
 	/Fewtrace \
 	/I"C:\Program Files (x86)\Windows Kits\8.1\Include\um" \
 	/DEBUG  \

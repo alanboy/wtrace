@@ -1,64 +1,20 @@
 
+/* ********************************************************** 
+ *
+ * wtrace
+ * 2014 - Alan Gonzalez
+ *
+ * ********************************************************** */
 #include <windows.h>
 #include <stdio.h>
 #include <string>
 #include <WinBase.h>
 #include <Winternl.h>
 
-#define SUCCESS(x) (x=!0)
-#define _UNICODE
-#define UNICODE 
-
-
-BOOL GetFileNameFromHandle(HANDLE hFile);
-
-enum class WriteLevel
-{
-	Debug = 0,
-	Info,
-	Output
-};
-
-wchar_t *gOutputFile;
-char *gpCommandLine;
-WriteLevel gWriteLevelThreshold = WriteLevel::Output;
-FILE * gFileHandle;
-FILE * fp;
-
-void Write(WriteLevel level, const WCHAR * lineFormat, ...)
-{
-	va_list lineArgs;
-	va_start (lineArgs, lineFormat);
-
-	if (level >= gWriteLevelThreshold)
-	{
-		if (fp == NULL)
-		{
-			vwprintf(lineFormat, lineArgs);
-			printf("\n");
-		}
-		else
-		{
-		
-			fwprintf(fp, lineFormat, lineArgs );
-		}
-	}
-
-	va_end (lineArgs);
-}
-
-void Usage(void)
-{
-	printf("trace [options] cmd\n");
-	printf("\t-?           show help\n");
-	printf("\t-o <file>    output all debugging information to <file>\n");
-	printf("\t-v <string>  set logging verbosity, can be: debug, info, output\n");
-}
-
-void Logo(void)
-{
-	printf("trace 0.1\n(c) 2014 Alan Gonzalez\n\n");
-}
+#include "output.h"
+#include "Utils.h"
+#include "Main.h"
+#include "Debugger.h"
 
 void GetProcessInfo(HANDLE hProcess)
 {
@@ -99,64 +55,12 @@ void GetProcessInfo(HANDLE hProcess)
 			len,
 			NULL);
 
-	if (fp)
-		fwprintf( fp, L" %s\n", wBufferCopy );
+	if (gFp)
+		fwprintf( gFp, L" %s\n", wBufferCopy );
 
 }
 
-void ParseCommandLine(int argc, char ** argv)
-{
-	int i = 0;
-	for (i = 0; i < (argc-1); i++)
-	{
-		if (strcmp(argv[i], "-?") == 0)
-		{
-			Usage();
-		}
-		else if (strcmp(argv[i], "-o") == 0)
-		{
-			i++;
-
-			gOutputFile = (WCHAR*)malloc(sizeof(WCHAR)*strlen(argv[i]));
-			mbstowcs(gOutputFile, argv[i], strlen(argv[i]));
-
-			Write(WriteLevel::Debug, L"Set output file to %s.", gOutputFile);
-
-			fp = fopen(argv[i], "w");
-
-			if (!fp)
-			{
-				Write(WriteLevel::Output, L"Unable to open %s for writing.", gOutputFile);
-			}
-		}
-		else if (strcmp(argv[i], "-v") == 0)
-		{
-			i++;
-			if (strcmp(argv[i], "info") == 0)
-			{
-				gWriteLevelThreshold = WriteLevel::Info;
-			}
-			else if (strcmp(argv[i], "debug") == 0)
-			{
-				gWriteLevelThreshold = WriteLevel::Debug;
-			}
-		}
-	}
-
-	// The last argument is the command line to trace
-	gpCommandLine = (argv[i]);
-	
-}
-
-static wchar_t* charToWChar(const char* text)
-{
-    size_t size = strlen(text) + 1;
-    wchar_t* wa = new wchar_t[size];
-    mbstowcs(wa,text,size);
-    return wa;
-}
-
-int main(int argc, char ** argv)
+void Run()
 {
 	BYTE cInstruction;
 	BYTE m_OriginalInstruction;
@@ -168,10 +72,6 @@ int main(int argc, char ** argv)
 	LPVOID dwStartAddress = 0;
 	PROCESS_INFORMATION pi;
 	STARTUPINFOA si;
-
-	Logo();
-
-	ParseCommandLine(argc, argv);
 
 	LPWSTR processName = new WCHAR[MAX_PATH];
 	DWORD processNameLen;
@@ -397,10 +297,4 @@ int main(int argc, char ** argv)
 	}
 
 	Write(WriteLevel::Debug, L"Finished.");
-
-	if (fp)
-		fclose(fp);
-
-	return 0;
 }
-
