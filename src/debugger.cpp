@@ -16,6 +16,8 @@
 #include "Main.h"
 #include "Debugger.h"
 
+PROCESS_INFORMATION pi;
+
 void GetProcessInfo(HANDLE hProcess)
 {
 	PROCESS_BASIC_INFORMATION pinfo;
@@ -70,7 +72,6 @@ void Run()
 	DWORD dwWriteSize ;
 	HRESULT hr;
 	LPVOID dwStartAddress = 0;
-	PROCESS_INFORMATION pi;
 	STARTUPINFOA si;
 	TCHAR pszFilename[MAX_PATH+1];
 
@@ -267,8 +268,9 @@ void Run()
 					break;
 		 
 				 case OUTPUT_DEBUG_STRING_EVENT: 
-				 // Display the output debugging string. 
-					Write(WriteLevel::Debug, L"OUTPUT_DEBUG_STRING_EVENT");
+					// Display the output debugging string. 
+					DebugStringEvent(de);
+
 					break;
 
 				 case RIP_EVENT:
@@ -293,8 +295,38 @@ void Run()
 	{
 		Write(WriteLevel::Output, L"Unable to create process.");
 		DWORD creatProcessErr = GetLastError();
-		printf("%d\n", creatProcessErr );
+		printf("%x\n", creatProcessErr );
 	}
 
 	Write(WriteLevel::Debug, L"Finished.");
+}
+
+void DebugStringEvent(const DEBUG_EVENT& de)
+{
+	Write(WriteLevel::Debug, L"");
+	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
+
+	WCHAR *msg = new WCHAR[DebugString.nDebugStringLength];
+	//// Don't care if string is ANSI, and we allocate double...
+
+	ReadProcessMemory(
+			pi.hProcess,					// HANDLE to Debuggee
+			DebugString.lpDebugStringData,	// Target process' valid pointer
+			msg,							// Copy to this address space
+			DebugString.nDebugStringLength,
+			NULL);
+
+	if ( DebugString.fUnicode )
+	{
+		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: %s", msg);
+	}
+	else
+	{
+		wchar_t *pwstrDebugMessage;
+		pwstrDebugMessage = charToWChar(gpCommandLine);
+		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: %s", pwstrDebugMessage);
+	
+	}
+
+	delete []msg;
 }
