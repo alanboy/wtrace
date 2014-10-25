@@ -34,10 +34,9 @@ wchar_t* charToWChar(const char* text)
 // This was taken from 
 // http://msdn.microsoft.com/en-us/library/windows/desktop/aa366789(v=vs.85).aspx
 //
-BOOL GetFileNameFromHandle(HANDLE hFile) 
+BOOL GetFileNameFromHandle(HANDLE hFile, TCHAR *pszFilename)
 {
   BOOL bSuccess = FALSE;
-  TCHAR pszFilename[MAX_PATH+1];
   HANDLE hFileMap;
 
   // Get the file size.
@@ -123,6 +122,5 @@ BOOL GetFileNameFromHandle(HANDLE hFile)
 
     CloseHandle(hFileMap);
   }
-  _tprintf(TEXT("File name is %s\n"), pszFilename);
   return(bSuccess);
 }

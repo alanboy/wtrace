@@ -72,6 +72,7 @@ void Run()
 	LPVOID dwStartAddress = 0;
 	PROCESS_INFORMATION pi;
 	STARTUPINFOA si;
+	TCHAR pszFilename[MAX_PATH+1];
 
 	LPWSTR processName = new WCHAR[MAX_PATH];
 	DWORD processNameLen;
@@ -109,7 +110,7 @@ void Run()
 
 					Write(WriteLevel::Debug, L"EXCEPTION_DEBUG_EVENT");
 					switch (de.u.Exception.ExceptionRecord.ExceptionCode)
-					{ 
+					{
 						case EXCEPTION_ACCESS_VIOLATION: 
 						// First chance: Pass this on to the system. 
 						// Last chance: Display an appropriate error. 
@@ -250,12 +251,13 @@ void Run()
 					break;
 		 
 				 case LOAD_DLL_DEBUG_EVENT: 
-				 // Read the debugging information included in the newly 
-				 // loaded DLL. Be sure to close the handle to the loaded DLL 
-				 // with CloseHandle.
-					Write(WriteLevel::Debug, L"LOAD_DLL_DEBUG_EVENT");
+					// Read the debugging information included in the newly 
+					// loaded DLL.
+					GetFileNameFromHandle(de.u.LoadDll.hFile, (TCHAR *)&pszFilename);
 
-					GetFileNameFromHandle(de.u.LoadDll.hFile);
+					wchar_t *pwstrDllName;
+					pwstrDllName = charToWChar(pszFilename);
+					Write(WriteLevel::Info, L"LOAD_DLL_DEBUG_EVENT: %s", pwstrDllName);
 
 					break;
 		 
@@ -272,9 +274,7 @@ void Run()
 				 case RIP_EVENT:
 					Write(WriteLevel::Debug, L"RIP_EVENT");
 					break;
-
-					
-  		}
+			}
 
 			hr  = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
 
