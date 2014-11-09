@@ -68,6 +68,7 @@ void GetProcessInfo(HANDLE hProcess)
 
 }
 
+
 void Run()
 {
 	BYTE cInstruction;
@@ -155,6 +156,12 @@ void Run()
 								FlushInstructionCache(pi.hProcess, dwStartAddress, 1);
 								m_OriginalInstruction = 0;
 							}
+
+
+//							// I have restored the original instruction
+//							RetrieveCallstack(
+//								de.u.CreateProcessInfo.hThread,
+//								de.u.CreateProcessInfo.hProcess);
 						}
 
 						break;
@@ -163,15 +170,28 @@ void Run()
 						// First chance: Pass this on to the system. 
 						// Last chance: Display an appropriate error. 
 						Write(WriteLevel::Debug, L"	EXCEPTION_DATATYPE_MISALIGNMENT");
+
+							
 						break;
 
 						case EXCEPTION_SINGLE_STEP: 
 						// First chance: Update the display of the 
 						// current instruction and register values. 
 							Write(WriteLevel::Debug, L"	EXCEPTION_SINGLE_STEP");
+
+							lcContext.ContextFlags = CONTEXT_ALL;
+							GetThreadContext(pi.hThread, &lcContext);
+//#if X86
+//							lcContext.Eip--;
+//#else
+//							lcContext.Rip--;
+//#endif
+
+							lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+							SetThreadContext(pi.hThread,&lcContext); 
 						break;
  
-						case DBG_CONTROL_C: 
+						case DBG_CONTROL_C:
 						// First chance: Pass this on to the system. 
 						// Last chance: Display an appropriate error. 
 						Write(WriteLevel::Debug, L"	DBG_CONTROL_C");
@@ -222,7 +242,7 @@ void Run()
 					break;
 		 
 				 case LOAD_DLL_DEBUG_EVENT: 
-					LoadDllDebugEvent(de); 
+					LoadDllDebugEvent(de);
 					break;
 		 
 				 case UNLOAD_DLL_DEBUG_EVENT: 
@@ -326,11 +346,11 @@ void LoadDllDebugEvent(const DEBUG_EVENT& de)
 	//// Check and notify
 	if (bSuccess && module_info.SymType == SymPdb)
 	{
-		printf("symbols loaded...\n");
+		Write(WriteLevel::Info, L"Symbols loaded.");
 	}
 	else
 	{
-		printf("no symbols ...\n");
+		Write(WriteLevel::Info, L"No symbols.");
 	}
 }
 
@@ -420,11 +440,11 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	if (bSuccess && module_info.SymType == SymPdb)
 	{
 		Write(WriteLevel::Info, L"Symbols loaded.");
-		RetrieveCallstack(de.u.CreateProcessInfo.hThread);
+		//also know if source code, check the module_info 
 	}
 	else
 	{
-		printf("No symbols ...\n");
+		Write(WriteLevel::Info, L"No symbols.");
 	}
 
 	BYTE cInstruction;
@@ -446,7 +466,7 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	}
 }
 
-void RetrieveCallstack(HANDLE hThread)
+void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 {
 	// Initialize 'stack' with some required stuff.
 	STACKFRAME64 stack={0};
@@ -454,7 +474,6 @@ void RetrieveCallstack(HANDLE hThread)
 	CONTEXT context;
 	context.ContextFlags = CONTEXT_FULL;
 
-	GetThreadContext(hThread, &context);
 
 #ifdef _X86_
 	stack.AddrPC.Offset = context.Eip; // EIP - Instruction Pointer
@@ -462,6 +481,8 @@ void RetrieveCallstack(HANDLE hThread)
 	stack.AddrStack.Offset = context.Esp; // ESP - Stack Pointer
 #else
 	stack.AddrPC.Offset = context.Rip; // EIP - Instruction Pointer
+	stack.AddrFrame.Offset = context.Rbp; // EBP
+	stack.AddrStack.Offset = context.Rsp; // ESP - Stack Pointer
 #endif
 
 	// Must be like this
@@ -469,14 +490,69 @@ void RetrieveCallstack(HANDLE hThread)
 	stack.AddrFrame.Mode = AddrModeFlat;
 	stack.AddrStack.Mode = AddrModeFlat;
 
-//	StackWalk64(
+	GetThreadContext(hThread, &context);
+
+	BOOL res = StackWalk64(
 //			IMAGE_FILE_MACHINE_I386,
-//			pi.hProcess,
-//			hThread,
-//			&stack,
-//			&context,
-//			_ProcessMemoryReader,
-//			SymFunctionTableAccess64,
-//			SymGetModuleBase64,
-//			0);
+			IMAGE_FILE_MACHINE_AMD64,
+			hProcess,
+			hThread,
+			&stack,
+			&context,
+			NULL,//		_ProcessMemoryReader,
+			SymFunctionTableAccess64,
+			SymGetModuleBase64,
+			0);
+
+	if (!res)
+	{
+		Write(WriteLevel::Info, L"StackWalk64 failed");
+	}
+	IMAGEHLP_MODULE64 module={0};
+	module.SizeOfStruct = sizeof(module);
+
+	BOOL bSuccess = SymGetModuleInfo64(
+			hProcess,
+			(DWORD64)stack.AddrPC.Offset,
+			&module);
+
+	if (bSuccess && module.SymType == SymPdb)
+	{
+		Write(WriteLevel::Info, L"Symbols loaded.");
+		//also know if source code, check the module_info 
+	}
+	else
+	{
+		Write(WriteLevel::Info, L"No symbols.");
+	}
+
+	Write(WriteLevel::Debug, L"linenumbers=%x", module.LineNumbers);
+
+
+//	DWORD add = GetStartAddress(hProcess, hThread, "mainCRTStartup");
+//	printf("maincrtstartup = 0x%x \n", add);
+//
+//	add = GetStartAddress(hProcess, hThread, "LauraFun");
+//	printf("maincrtstartup = 0x%x \n", add);
+}
+
+
+//
+// Get the address of a given function name
+//
+//
+DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread, CHAR * funName)
+{
+   SYMBOL_INFO *pSymbol;
+   pSymbol = (SYMBOL_INFO *)new BYTE[sizeof(SYMBOL_INFO )+MAX_SYM_NAME];
+   pSymbol->SizeOfStruct= sizeof(SYMBOL_INFO );
+   pSymbol->MaxNameLen = MAX_SYM_NAME;
+   SymFromName(hProcess, funName, pSymbol);
+
+   // Store address, before deleting pointer
+   DWORD dwAddress = pSymbol->Address;
+
+   delete [](BYTE*)pSymbol; // Valid syntax!
+
+   return dwAddress;
 }
