@@ -8,6 +8,7 @@
 extern wchar_t *gOutputFile;
 extern char *gpCommandLine;
 extern FILE * gFileHandle;
+extern int gAnalysisLevel;
 
 void ParseCommandLine(int argc, char ** argv);
 void Usage(void);

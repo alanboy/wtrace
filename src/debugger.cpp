@@ -17,6 +17,7 @@
 #include "Main.h"
 #include "Debugger.h"
 
+int gAnalysisLevel;
 BYTE m_OriginalInstruction;
 DWORD processNameLen;
 LPVOID dwStartAddress;
@@ -95,6 +96,7 @@ void Run()
 	Write(WriteLevel::Debug, L"Creating process %s", pwstrCommandLine);
 
 	SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+	DWORD StartTicks = GetTickCount();
 
 	bool bCreateProcRes;
 	bCreateProcRes = CreateProcess(NULL, gpCommandLine, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
@@ -185,10 +187,16 @@ void Run()
 //							lcContext.Eip--;
 //#else
 //							lcContext.Rip--;
+							Write(WriteLevel::Debug, L"	rip=0x%x", lcContext.Rip);
 //#endif
 
 							lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
 							SetThreadContext(pi.hThread,&lcContext); 
+
+							//RetrieveCallstack(
+							//	de.u.CreateProcessInfo.hThread,
+							//	de.u.CreateProcessInfo.hProcess);
+
 						break;
  
 						case DBG_CONTROL_C:
@@ -281,7 +289,10 @@ void Run()
 		printf("%x\n", creatProcessErr );
 	}
 
-	Write(WriteLevel::Debug, L"Finished.");
+	DWORD TickDiff = GetTickCount() - StartTicks;
+
+
+	Write(WriteLevel::Output, L"Finished after %d milliseconds ", TickDiff );
 }
 
 void DebugStringEvent(const DEBUG_EVENT& de)
@@ -451,11 +462,14 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	SIZE_T dwReadBytes;
 
 	// Read the first instruction
-	ReadProcessMemory(pi.hProcess, (void*)dwStartAddress, &cInstruction, 1, &dwReadBytes);
-
+	ReadProcessMemory(
+			pi.hProcess,
+			(void*)dwStartAddress,
+			&cInstruction,
+			1,
+			&dwReadBytes);
 
 	Write(WriteLevel::Debug, L"	replacing %x with BP", cInstruction);
-	// Save it!
 
 	if (cInstruction != 0xCC) {
 		m_OriginalInstruction = cInstruction;

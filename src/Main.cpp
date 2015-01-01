@@ -53,6 +53,11 @@ void ParseCommandLine(int argc, char ** argv)
 				gWriteLevelThreshold = WriteLevel::Debug;
 			}
 		}
+		else if (strcmp(argv[i], "-a") == 0)
+		{
+			i++;
+			gAnalysisLevel = atoi(argv[i]);
+		}
 	}
 
 	// The last argument is the command line to trace
@@ -66,6 +71,7 @@ void Usage(void)
 	printf("\t-?           show help\n");
 	printf("\t-o <file>    output all debugging information to <file>\n");
 	printf("\t-v <string>  set logging verbosity, can be: debug, info, output\n");
+	printf("\t-a <int>     Analysis depth, can be: 1 for processes, 2 for io calls, 3 for function level (if symbols are available)\n");
 }
 
 void Logo(void)
@@ -78,6 +84,8 @@ int main(int argc, char ** argv)
 
 	Logo();
 
+	gAnalysisLevel = 0;
+
 	// Alters state by modifying global variables
 	ParseCommandLine(argc, argv);
 
@@ -88,3 +96,4 @@ int main(int argc, char ** argv)
 
 	return 0;
 }
+
