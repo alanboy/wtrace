@@ -5,16 +5,17 @@
 
 TargetPlatform=x86
 BinDir=bin\$(TargetPlatform)
+WtraceBins=bin\$(TargetPlatform)\wtrace.exe
 
 CppSources=..\..\src\Main.cpp  \
 		..\..\src\debugger.cpp  \
 		..\..\src\Output.cpp  \
 		..\..\src\Utils.cpp  \
 
-all: clean bin\$(TargetPlatform)
+all: clean $(WtraceBins)
 	echo done!
 
-bin\$(TargetPlatform): src\debugger.cpp
+$(WtraceBins): src\debugger.cpp
 	IF NOT EXIST $(BinDir) mkdir $(BinDir)
 	cd $(BinDir)
 	cl /Zi \
@@ -23,6 +24,7 @@ bin\$(TargetPlatform): src\debugger.cpp
 		/Fewtrace \
 		/I"C:\Program Files (x86)\Windows Kits\8.1\Include\um" \
 		/DEBUG  \
+		/RTCs \
 		"ntdll.lib" \
 		"Dbghelp.lib"
 	cd ..\..
@@ -36,5 +38,5 @@ publish: latest\$(TargetPlatform) $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(Bi
 	date /t >> latest\$(TargetPlatform)\readme.txt
 
 clean:
-	IF EXIST bin\$(TargetPlatform) del bin\$(TargetPlatform) /s/q && rd bin\$(TargetPlatform)
+	IF EXIST bin\$(TargetPlatform) del /q bin\$(TargetPlatform)\*
 

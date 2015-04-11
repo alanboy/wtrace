@@ -5,6 +5,8 @@
  * 2014 - Alan Gonzalez
  *
  * ********************************************************** */
+#define UNICODE
+#define _UNICODE
 #include <windows.h>
 #include <stdio.h>
 #include <string>

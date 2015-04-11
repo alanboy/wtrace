@@ -5,6 +5,8 @@
  * 2014 - Alan Gonzalez
  *
  * ********************************************************** */
+#define UNICODE
+#define _UNICODE
 #include <windows.h>
 #include <stdio.h>
 #include <string>
@@ -19,7 +21,7 @@
 #include "output.h"
 
 wchar_t *gOutputFile;
-char *gpCommandLine;
+wchar_t *gpCommandLine;
 FILE * gFileHandle;
 
 wchar_t* charToWChar(const char* text)

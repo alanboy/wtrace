@@ -6,11 +6,11 @@
 #define BUFSIZE 512
 
 extern wchar_t *gOutputFile;
-extern char *gpCommandLine;
+extern wchar_t *gpCommandLine;
 extern FILE * gFileHandle;
 extern int gAnalysisLevel;
 
-void ParseCommandLine(int argc, char ** argv);
+void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram);
 void Usage(void);
 void Logo(void);
 int  main(int argc, char ** argv);

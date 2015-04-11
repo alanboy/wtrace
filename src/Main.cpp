@@ -5,6 +5,8 @@
  * 2014 - Alan Gonzalez
  *
  * ********************************************************** */
+#define UNICODE
+#define _UNICODE
 #include <windows.h>
 #include <stdio.h>
 #include <string>
@@ -15,40 +17,53 @@
 #include "Utils.h"
 #include "Debugger.h"
 #include "Main.h"
+#include <Strsafe.h>
 
-void ParseCommandLine(int argc, char ** argv)
+#define CMPSTR(X,Y) CompareStringOrdinal(##X##, -1, ##Y##, -1, TRUE) == CSTR_EQUAL
+
+void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 {
+	*pfExitProgram = FALSE;
+
 	int i = 0;
-	for (i = 0; i < (argc-1); i++)
+
+	if (argc <= 1)
 	{
-		if (strcmp(argv[i], "-?") == 0)
+		*pfExitProgram = TRUE;
+		goto Exit;
+	}
+
+	for (i = 1; i < argc; i++)
+	{
+		if (CMPSTR(argv[i], L"-?"))
 		{
 			Usage();
+			*pfExitProgram = TRUE;
 		}
-		else if (strcmp(argv[i], "-o") == 0)
+		else if (CMPSTR(argv[i], L"-o"))
 		{
 			i++;
 
-			gOutputFile = (WCHAR*)malloc(sizeof(WCHAR)*strlen(argv[i]));
-			mbstowcs(gOutputFile, argv[i], strlen(argv[i]));
+			gOutputFile = (WCHAR*)malloc(sizeof(WCHAR)*wcslen(argv[i]));
+			StringCchCopy(gOutputFile, sizeof(WCHAR)*wcslen(argv[i]), argv[i]);
 
 			Write(WriteLevel::Debug, L"Set output file to %s.", gOutputFile);
 
-			gFp = fopen(argv[i], "w");
+			gFp = _wfopen(argv[i], L"w");
 
 			if (!gFp)
 			{
 				Write(WriteLevel::Output, L"Unable to open %s for writing.", gOutputFile);
 			}
 		}
-		else if (strcmp(argv[i], "-v") == 0)
+		else if (CMPSTR(argv[i], L"-v"))
 		{
 			i++;
-			if (strcmp(argv[i], "info") == 0)
+			if (CMPSTR(argv[i], L"info"))
 			{
 				gWriteLevelThreshold = WriteLevel::Info;
 			}
-			else if (strcmp(argv[i], "debug") == 0)
+			else if (CMPSTR(argv[i], L"debug"))
 			{
 				gWriteLevelThreshold = WriteLevel::Debug;
 			}
@@ -61,13 +76,16 @@ void ParseCommandLine(int argc, char ** argv)
 	}
 
 	// The last argument is the command line to trace
-	gpCommandLine = (argv[i]);
-	
+	gpCommandLine = (argv[argc-1]);
+
+Exit:
+
+	return;
 }
 
 void Usage(void)
 {
-	printf("trace [options] cmd\n");
+	printf("wtrace [options] cmd\n");
 	printf("\t-?           show help\n");
 	printf("\t-o <file>    output all debugging information to <file>\n");
 	printf("\t-v <string>  set logging verbosity, can be: debug, info, output\n");
@@ -79,18 +97,24 @@ void Logo(void)
 	printf("trace 0.1\n(c) 2014 Alan Gonzalez\n\n");
 }
 
-int main(int argc, char ** argv)
+int wmain(int argc, wchar_t ** argv)
 {
-
 	Logo();
 
 	gAnalysisLevel = 0;
+	bool fExitProgram = FALSE;
 
 	// Alters state by modifying global variables
-	ParseCommandLine(argc, argv);
+	ParseCommandLine(argc, argv, &fExitProgram);
+
+	if (fExitProgram)
+	{
+		goto Exit;
+	}
 
 	Run();
 
+Exit:
 	if (gFp)
 		fclose(gFp);
 

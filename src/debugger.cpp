@@ -5,6 +5,8 @@
  * 2014 - Alan Gonzalez
  *
  * ********************************************************** */
+#define UNICODE
+#define _UNICODE
 #include <windows.h>
 #include <stdio.h>
 #include <string>
@@ -78,7 +80,7 @@ void Run()
 	DWORD dwReadBytes ;
 	SIZE_T dwWriteSize ;
 	HRESULT hr;
-	STARTUPINFOA si;
+	STARTUPINFOW si;
 	bool firstDebugEvent = 1;
 
 	dwStartAddress = 0;
@@ -90,10 +92,7 @@ void Run()
 	memset(&si, 0, sizeof(si));
 	memset(&pi, 0, sizeof(pi));
 
-	// gpCommandLine is char*, Write() needs wchar_t*
-	wchar_t *pwstrCommandLine;
-	pwstrCommandLine = charToWChar(gpCommandLine);
-	Write(WriteLevel::Debug, L"Creating process %s", pwstrCommandLine);
+	Write(WriteLevel::Debug, L"Creating process %s", gpCommandLine);
 
 	SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
 	DWORD StartTicks = GetTickCount();
@@ -310,15 +309,13 @@ void DebugStringEvent(const DEBUG_EVENT& de)
 			DebugString.nDebugStringLength,
 			NULL);
 
-	if ( DebugString.fUnicode )
+	if (DebugString.fUnicode)
 	{
 		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: %s", msg);
 	}
 	else
 	{
-		wchar_t *pwstrDebugMessage;
-		pwstrDebugMessage = charToWChar(gpCommandLine);
-		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: %s", pwstrDebugMessage);
+		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: %s", gpCommandLine);
 	
 	}
 
@@ -328,11 +325,13 @@ void DebugStringEvent(const DEBUG_EVENT& de)
 void LoadDllDebugEvent(const DEBUG_EVENT& de)
 {
 	// Read the debugging information included in the newly loaded DLL.
-	TCHAR pszFilename[MAX_PATH+1];
-	GetFileNameFromHandle(de.u.LoadDll.hFile, (TCHAR *)&pszFilename);
+	WCHAR pszFilename[MAX_PATH+1];
+	GetFileNameFromHandle(de.u.LoadDll.hFile, (WCHAR *)&pszFilename);
 
 	wchar_t *pwstrDllName;
-	pwstrDllName = charToWChar(pszFilename);
+    pwstrDllName = pszFilename;
+	//pwstrDllName = charToWChar(pszFilename);
+    //
 	Write(WriteLevel::Info, L"LOAD_DLL_DEBUG_EVENT: Loaded %s at %x",
 			pwstrDllName,
 			de.u.LoadDll.lpBaseOfDll);
