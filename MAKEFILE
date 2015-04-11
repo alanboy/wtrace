@@ -1,32 +1,40 @@
 
-all: clean bin
+
+# @TODO: Select architecture
+#	IF "$(PLATFORM)"=="X64" ( TargetPlatform=x64 ) ELSE ( TargetPlatform=x86 )
+
+TargetPlatform=x86
+BinDir=bin\$(TargetPlatform)
+
+CppSources=..\..\src\Main.cpp  \
+		..\..\src\debugger.cpp  \
+		..\..\src\Output.cpp  \
+		..\..\src\Utils.cpp  \
+
+all: clean bin\$(TargetPlatform)
 	echo done!
 
-bin: src\debugger.cpp
-	IF NOT EXIST bin mkdir bin
-	cd bin
+bin\$(TargetPlatform): src\debugger.cpp
+	IF NOT EXIST $(BinDir) mkdir $(BinDir)
+	cd $(BinDir)
 	cl /Zi \
-	/EHsc \
-	..\src\Main.cpp  \
-	..\src\debugger.cpp  \
-	..\src\Output.cpp  \
-	..\src\Utils.cpp  \
-	/Fewtrace \
-	/I"C:\Program Files (x86)\Windows Kits\8.1\Include\um" \
-	/DEBUG  \
-	"C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64\ntdll.lib" \
-	"C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64\Dbghelp.lib"
-	cd ..
+		/EHsc \
+		$(CppSources) \
+		/Fewtrace \
+		/I"C:\Program Files (x86)\Windows Kits\8.1\Include\um" \
+		/DEBUG  \
+		"ntdll.lib" \
+		"Dbghelp.lib"
+	cd ..\..
 
-publish: bin\wtrace.exe bin\wtrace.pdb bin\vc120.pdb
-	copy bin\*.exe latest
-	copy bin\*.pdb latest
-	echo Built by : > latest\readme.txt
-	whoami >> latest\readme.txt
-	time /t >> latest\readme.txt
-	date /t >> latest\readme.txt
-
+publish: latest\$(TargetPlatform) $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
+	copy $(BinDir)\*.exe latest\$(TargetPlatform)
+	copy $(BinDir)\*.pdb latest\$(TargetPlatform)
+	echo Built by : > latest\$(TargetPlatform)\readme.txt
+	whoami >> latest\$(TargetPlatform)\readme.txt
+	time /t >> latest\$(TargetPlatform)\readme.txt
+	date /t >> latest\$(TargetPlatform)\readme.txt
 
 clean:
-	IF EXIST bin del bin /s/q bin\* && rd bin
+	IF EXIST bin\$(TargetPlatform) del bin\$(TargetPlatform) /s/q && rd bin\$(TargetPlatform)
 

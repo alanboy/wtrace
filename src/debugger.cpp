@@ -140,8 +140,7 @@ void Run()
 
 							lcContext.ContextFlags = CONTEXT_ALL;
 							GetThreadContext(pi.hThread, &lcContext);
-#if 0
-							//x86
+#ifdef _X86_
 							lcContext.Eip--;
 #else
 							lcContext.Rip--;
@@ -457,7 +456,7 @@ void RetrieveCallstack(HANDLE hThread)
 
 	GetThreadContext(hThread, &context);
 
-#if X86
+#ifdef _X86_
 	stack.AddrPC.Offset = context.Eip; // EIP - Instruction Pointer
 	stack.AddrFrame.Offset = context.Ebp; // EBP
 	stack.AddrStack.Offset = context.Esp; // ESP - Stack Pointer
