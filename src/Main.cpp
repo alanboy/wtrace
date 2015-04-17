@@ -49,7 +49,7 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 
 			Write(WriteLevel::Debug, L"Set output file to %s.", gOutputFile);
 
-			gFp = _wfopen(argv[i], L"w");
+			_wfopen_s(&gFp, argv[i], L"w");
 
 			if (!gFp)
 			{
@@ -68,10 +68,10 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 				gWriteLevelThreshold = WriteLevel::Debug;
 			}
 		}
-		else if (strcmp(argv[i], "-a") == 0)
+		else if (CMPSTR(argv[i], L"-a"))
 		{
 			i++;
-			gAnalysisLevel = atoi(argv[i]);
+			gAnalysisLevel = _wtoi(argv[i]);
 		}
 	}
 

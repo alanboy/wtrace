@@ -32,12 +32,17 @@ void GetProcessInfo(HANDLE hProcess)
 	PROCESS_BASIC_INFORMATION pinfo;
 	ULONG resLen;
 
-	LONG status = NtQueryInformationProcess(
+	NTSTATUS status = NtQueryInformationProcess(
 			hProcess,
 			PROCESSINFOCLASS::ProcessBasicInformation,
 			(PVOID)&pinfo,
 			sizeof(PVOID)*6,
 			&resLen);
+
+	if (status != 0)
+	{
+		goto Exit;
+	}
 
 	PPEB ppeb = (PPEB)((PVOID*)&pinfo)[1];
 	PPEB ppebCopy = (PPEB)malloc(sizeof(PEB));
@@ -69,16 +74,18 @@ void GetProcessInfo(HANDLE hProcess)
 	if (gFp)
 		fwprintf( gFp, L" %s\n", wBufferCopy );
 
+Exit:
+
+	return;
 }
 
 
 void Run()
 {
-	BYTE cInstruction;
 	CONTEXT lcContext;
 	DEBUG_EVENT de = {0};
-	DWORD dwReadBytes ;
 	SIZE_T dwWriteSize ;
+	int bCreateProcRes;
 	HRESULT hr;
 	STARTUPINFOW si;
 	bool firstDebugEvent = 1;
@@ -97,7 +104,6 @@ void Run()
 	SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
 	DWORD StartTicks = GetTickCount();
 
-	bool bCreateProcRes;
 	bCreateProcRes = CreateProcess(NULL, gpCommandLine, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
 
 	if (bCreateProcRes)
@@ -180,17 +186,17 @@ void Run()
 						// current instruction and register values. 
 							Write(WriteLevel::Debug, L"	EXCEPTION_SINGLE_STEP");
 
-							lcContext.ContextFlags = CONTEXT_ALL;
-							GetThreadContext(pi.hThread, &lcContext);
-//#if X86
-//							lcContext.Eip--;
-//#else
-//							lcContext.Rip--;
-							Write(WriteLevel::Debug, L"	rip=0x%x", lcContext.Rip);
-//#endif
-
-							lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-							SetThreadContext(pi.hThread,&lcContext); 
+//							lcContext.ContextFlags = CONTEXT_ALL;
+//							GetThreadContext(pi.hThread, &lcContext);
+//#ifdef _X86_
+////							lcContext.Eip--;
+////#else
+////							lcContext.Rip--;
+//							Write(WriteLevel::Debug, L"	rip=0x%x", lcContext.Rip);
+////#endif
+//
+//							lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+//							SetThreadContext(pi.hThread,&lcContext); 
 
 							//RetrieveCallstack(
 							//	de.u.CreateProcessInfo.hThread,
@@ -270,7 +276,7 @@ void Run()
 
 			hr  = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
 
-			if(!SUCCESS(hr))
+			if(FAILED(hr))
 			{
 				Write(WriteLevel::Debug, L"Error.");
 				break;
@@ -329,9 +335,8 @@ void LoadDllDebugEvent(const DEBUG_EVENT& de)
 	GetFileNameFromHandle(de.u.LoadDll.hFile, (WCHAR *)&pszFilename);
 
 	wchar_t *pwstrDllName;
-    pwstrDllName = pszFilename;
-	//pwstrDllName = charToWChar(pszFilename);
-    //
+	pwstrDllName = pszFilename;
+
 	Write(WriteLevel::Info, L"LOAD_DLL_DEBUG_EVENT: Loaded %s at %x",
 			pwstrDllName,
 			de.u.LoadDll.lpBaseOfDll);
@@ -387,7 +392,7 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 			0//_In_   DWORD dwFlags
 			);
 
-	if (processNameLen == 0)
+	if (processNameLen != 0)
 	{
 		Write(WriteLevel::Debug, L"GetFinalPathNameByHandle failed");
 	}
@@ -484,7 +489,7 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 	// Initialize 'stack' with some required stuff.
 	STACKFRAME64 stack={0};
 
-	CONTEXT context;
+	CONTEXT context = {0};
 	context.ContextFlags = CONTEXT_FULL;
 
 
@@ -553,19 +558,20 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 //
 // Get the address of a given function name
 //
-//
-DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread, CHAR * funName)
+DWORD GetStartAddress(HANDLE hProcess, CHAR * funName)
 {
-   SYMBOL_INFO *pSymbol;
-   pSymbol = (SYMBOL_INFO *)new BYTE[sizeof(SYMBOL_INFO )+MAX_SYM_NAME];
-   pSymbol->SizeOfStruct= sizeof(SYMBOL_INFO );
-   pSymbol->MaxNameLen = MAX_SYM_NAME;
-   SymFromName(hProcess, funName, pSymbol);
+	SYMBOL_INFO *pSymbol;
 
-   // Store address, before deleting pointer
-   DWORD dwAddress = pSymbol->Address;
+	pSymbol = (SYMBOL_INFO *)new BYTE[sizeof(SYMBOL_INFO )+MAX_SYM_NAME];
+	pSymbol->SizeOfStruct= sizeof(SYMBOL_INFO );
+	pSymbol->MaxNameLen = MAX_SYM_NAME;
 
-   delete [](BYTE*)pSymbol; // Valid syntax!
+	SymFromName(hProcess, funName, pSymbol);
 
-   return dwAddress;
+	// Store address, before deleting pointer
+	DWORD dwAddress = pSymbol->Address;
+
+	delete [](BYTE*)pSymbol; // Valid syntax!
+
+	return dwAddress;
 }

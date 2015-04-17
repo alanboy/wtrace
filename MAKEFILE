@@ -3,7 +3,7 @@
 # @TODO: Select architecture
 #	IF "$(PLATFORM)"=="X64" ( TargetPlatform=x64 ) ELSE ( TargetPlatform=x86 )
 
-TargetPlatform=x86
+TargetPlatform=x64
 BinDir=bin\$(TargetPlatform)
 WtraceBins=bin\$(TargetPlatform)\wtrace.exe
 
@@ -24,6 +24,7 @@ $(WtraceBins): src\debugger.cpp
 		/Fewtrace \
 		/I"C:\Program Files (x86)\Windows Kits\8.1\Include\um" \
 		/DEBUG  \
+		/W4  \
 		/RTCs \
 		"ntdll.lib" \
 		"Dbghelp.lib"

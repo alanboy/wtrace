@@ -24,14 +24,6 @@ wchar_t *gOutputFile;
 wchar_t *gpCommandLine;
 FILE * gFileHandle;
 
-wchar_t* charToWChar(const char* text)
-{
-    size_t size = strlen(text) + 1;
-    wchar_t* wa = new wchar_t[size];
-    mbstowcs(wa,text,size);
-    return wa;
-}
-
 //
 // This was taken from 
 // http://msdn.microsoft.com/en-us/library/windows/desktop/aa366789(v=vs.85).aspx
