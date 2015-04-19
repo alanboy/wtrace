@@ -84,7 +84,6 @@ void Run()
 {
 	CONTEXT lcContext;
 	DEBUG_EVENT de = {0};
-	SIZE_T dwWriteSize ;
 	int bCreateProcRes;
 	HRESULT hr;
 	STARTUPINFOW si;
@@ -123,13 +122,13 @@ void Run()
 			{
 				case EXCEPTION_DEBUG_EVENT: 
 
-					Write(WriteLevel::Debug, L"EXCEPTION_DEBUG_EVENT");
+					Write(WriteLevel::Debug, L"\tEXCEPTION_DEBUG_EVENT");
 					switch (de.u.Exception.ExceptionRecord.ExceptionCode)
 					{
-						case EXCEPTION_ACCESS_VIOLATION: 
+						case EXCEPTION_ACCESS_VIOLATION:
 						// First chance: Pass this on to the system. 
 						// Last chance: Display an appropriate error. 
-						Write(WriteLevel::Debug, L"	EXCEPTION_ACCESS_VIOLATION");
+						Write(WriteLevel::Debug, L"\tEXCEPTION_ACCESS_VIOLATION");
 						break;
 
 						case EXCEPTION_BREAKPOINT: 
@@ -138,37 +137,39 @@ void Run()
 
 						if (firstDebugEvent)
 						{
-							Write(WriteLevel::Debug, L"First EXCEPTION_BREAKPOINT ignoring...");
+							Write(WriteLevel::Debug, L"\tEXCEPTION_BREAKPOINT (first) ignoring...");
 							firstDebugEvent = 0;
 						}
 						else
 						{
-							Write(WriteLevel::Debug, L"EXCEPTION_BREAKPOINT");
-							Write(WriteLevel::Debug, L"Start address=%x", dwStartAddress);
+							Write(WriteLevel::Debug, L"\tEXCEPTION_BREAKPOINT");
+							Write(WriteLevel::Debug, L"\tStart address=%x", dwStartAddress);
 
 							lcContext.ContextFlags = CONTEXT_ALL;
 							GetThreadContext(pi.hThread, &lcContext);
+
 #ifdef _X86_
 							lcContext.Eip--;
 #else
 							lcContext.Rip--;
 #endif
 
-							lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-							SetThreadContext(pi.hThread,&lcContext); 
+							Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+							lcContext.EFlags |= 0x100;
+							SetThreadContext(pi.hThread, &lcContext);
 
 							if (m_OriginalInstruction != 0)
 							{
-								WriteProcessMemory(pi.hProcess, dwStartAddress, &m_OriginalInstruction, 1,&dwWriteSize);
+								SIZE_T lNumberOfBytesRead ;
+								Write(WriteLevel::Debug, L"\tWriting back original instruction ");
+								WriteProcessMemory(pi.hProcess, dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
 								FlushInstructionCache(pi.hProcess, dwStartAddress, 1);
 								m_OriginalInstruction = 0;
 							}
 
-
-//							// I have restored the original instruction
-//							RetrieveCallstack(
-//								de.u.CreateProcessInfo.hThread,
-//								de.u.CreateProcessInfo.hProcess);
+							//RetrieveCallstack(
+							//	de.u.CreateProcessInfo.hThread,
+							//	de.u.CreateProcessInfo.hProcess);
 						}
 
 						break;
@@ -176,47 +177,50 @@ void Run()
 						case EXCEPTION_DATATYPE_MISALIGNMENT: 
 						// First chance: Pass this on to the system. 
 						// Last chance: Display an appropriate error. 
-						Write(WriteLevel::Debug, L"	EXCEPTION_DATATYPE_MISALIGNMENT");
+						Write(WriteLevel::Debug, L"\tEXCEPTION_DATATYPE_MISALIGNMENT");
 
 							
 						break;
 
 						case EXCEPTION_SINGLE_STEP: 
-						// First chance: Update the display of the 
-						// current instruction and register values. 
-							Write(WriteLevel::Debug, L"	EXCEPTION_SINGLE_STEP");
+							// First chance: Update the display of the 
+							// current instruction and register values. 
 
-//							lcContext.ContextFlags = CONTEXT_ALL;
-//							GetThreadContext(pi.hThread, &lcContext);
-//#ifdef _X86_
-////							lcContext.Eip--;
-////#else
-////							lcContext.Rip--;
-//							Write(WriteLevel::Debug, L"	rip=0x%x", lcContext.Rip);
-////#endif
-//
-//							lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-//							SetThreadContext(pi.hThread,&lcContext); 
+							if (gAnalysisLevel == 3)
+							{
+								lcContext.ContextFlags = CONTEXT_ALL;
+								GetThreadContext(pi.hThread, &lcContext);
 
-							//RetrieveCallstack(
-							//	de.u.CreateProcessInfo.hThread,
-							//	de.u.CreateProcessInfo.hProcess);
+								Write(WriteLevel::Debug, L"\tEXCEPTION_SINGLE_STEP IP=%x",
+#ifdef _X86_
+								lcContext.Eip
+#else
+								lcContext.Rip
+#endif
+								);
 
+								lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+								SetThreadContext(pi.hThread, &lcContext);
+
+	//							RetrieveCallstack(
+	//								de.u.CreateProcessInfo.hThread,
+	//								de.u.CreateProcessInfo.hProcess);
+							}
 						break;
  
 						case DBG_CONTROL_C:
 						// First chance: Pass this on to the system. 
 						// Last chance: Display an appropriate error. 
-						Write(WriteLevel::Debug, L"	DBG_CONTROL_C");
+						Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
 						break;
 
 						case 0xc000001d:
-						Write(WriteLevel::Debug, L"Illegal Instruction  An attempt was made to execute an illegal instruction.");
+						Write(WriteLevel::Debug, L"\tIllegal Instruction  An attempt was made to execute an illegal instruction.");
 						break;
 
 						default:
 						// Handle other exceptions. 
-						Write(WriteLevel::Debug, L"    %d ? ", de.u.Exception.ExceptionRecord.ExceptionCode);
+						Write(WriteLevel::Debug, L"\t%d ? ", de.u.Exception.ExceptionRecord.ExceptionCode);
 						break;
 					} 
 
@@ -237,7 +241,6 @@ void Run()
 
 				 case CREATE_PROCESS_DEBUG_EVENT: 
 					CreateProcessDebugEvent(de);
-
 					break;
 		 
 				 case EXIT_THREAD_DEBUG_EVENT: 
@@ -284,7 +287,7 @@ void Run()
 		}
 
 		CloseHandle(pi.hProcess);
-		CloseHandle(pi.hThread);	
+		CloseHandle(pi.hThread);
 
 	}
 	else
@@ -295,7 +298,6 @@ void Run()
 	}
 
 	DWORD TickDiff = GetTickCount() - StartTicks;
-
 
 	Write(WriteLevel::Output, L"Finished after %d milliseconds ", TickDiff );
 }
@@ -337,9 +339,6 @@ void LoadDllDebugEvent(const DEBUG_EVENT& de)
 	wchar_t *pwstrDllName;
 	pwstrDllName = pszFilename;
 
-	Write(WriteLevel::Info, L"LOAD_DLL_DEBUG_EVENT: Loaded %s at %x",
-			pwstrDllName,
-			de.u.LoadDll.lpBaseOfDll);
 
 	DWORD64 dwBase = SymLoadModuleEx(
 			pi.hProcess,//_In_  HANDLE hProcess,
@@ -358,19 +357,18 @@ void LoadDllDebugEvent(const DEBUG_EVENT& de)
 			dwBase,
 			&module_info);
 
-	//// Check and notify
-	if (bSuccess && module_info.SymType == SymPdb)
-	{
-		Write(WriteLevel::Info, L"Symbols loaded.");
-	}
-	else
-	{
-		Write(WriteLevel::Info, L"No symbols.");
-	}
+	Write(WriteLevel::Info, L"LOAD_DLL_DEBUG_EVENT: Loaded %s at %x, symbols %s loaded",
+			pwstrDllName,
+			de.u.LoadDll.lpBaseOfDll,
+			(bSuccess && module_info.SymType == SymPdb) ? L"" : L" NOT ");
 }
 
 void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 {
+	IMAGEHLP_MODULE64 module_info;
+	BYTE cInstruction;
+	SIZE_T lpNumberOfBytesRead;
+
 	// As needed, examine or change the registers of the
 	// process's initial thread with the GetThreadContext and
 	// SetThreadContext functions; read from and write to the
@@ -379,25 +377,21 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	// thread execution with the SuspendThread and ResumeThread
 	// functions. Be sure to close the handle to the process image
 	// file with CloseHandle.
-	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_EVENT");
 	dwStartAddress = (LPVOID)de.u.CreateProcessInfo.lpStartAddress;
-	Write(WriteLevel::Debug, L"\tStart address=0x%x", dwStartAddress);
+	//Write(WriteLevel::Debug, L"\tStart address=0x%x", dwStartAddress);
 
 	nSpawnedProcess++;
 
 	processNameLen = GetFinalPathNameByHandleW(
-			de.u.CreateProcessInfo.hFile,//_In_   HANDLE hFile,
-			processName,//_Out_  LPWTSTR lpszFilePath,
-			MAX_PATH,//_In_   DWORD cchFilePath,
-			0//_In_   DWORD dwFlags
-			);
+						de.u.CreateProcessInfo.hFile,
+						processName,
+						MAX_PATH,
+						0);
 
-	if (processNameLen != 0)
+	if (processNameLen == 0)
 	{
-		Write(WriteLevel::Debug, L"GetFinalPathNameByHandle failed");
+		Write(WriteLevel::Debug, L"GetFinalPathNameByHandle failed: %x", GetLastError());
 	}
-
-	Write(WriteLevel::Output, L"New process name = %s", processName);
 
 	//
 	// Initializes the symbol handler for a process.
@@ -415,7 +409,6 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 			printf("SymInitialize returned %x\n", error);
 		}
 	}
-
 
 	GetProcessInfo(de.u.CreateProcessInfo.hProcess);
 
@@ -441,7 +434,6 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
-	IMAGEHLP_MODULE64 module_info;
 	module_info.SizeOfStruct = sizeof(module_info);
 
 	//
@@ -452,46 +444,51 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 			dwBase,
 			&module_info);
 
-	if (bSuccess && module_info.SymType == SymPdb)
-	{
-		Write(WriteLevel::Info, L"Symbols loaded.");
-		//also know if source code, check the module_info 
-	}
-	else
-	{
-		Write(WriteLevel::Info, L"No symbols.");
-	}
-
-	BYTE cInstruction;
-	SIZE_T dwReadBytes;
+	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_EVENT %s, symbols %s loaded ",
+			processName,
+			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"NOT");
 
 	// Read the first instruction
-	ReadProcessMemory(
-			pi.hProcess,
-			(void*)dwStartAddress,
-			&cInstruction,
-			1,
-			&dwReadBytes);
+	int result = ReadProcessMemory(
+					pi.hProcess,
+					(void*)dwStartAddress,
+					&cInstruction,
+					1,
+					&lpNumberOfBytesRead);
 
-	Write(WriteLevel::Debug, L"	replacing %x with BP", cInstruction);
+	if (result == 0)
+	{
+		Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
+	}
 
-	if (cInstruction != 0xCC) {
+	if (cInstruction != 0xCC)
+	{
+		Write(WriteLevel::Debug, L"Replacing first instruction '%x' with 0xCC", cInstruction);
+
 		m_OriginalInstruction = cInstruction;
+
 		// Replace it with Breakpoint
 		cInstruction = 0xCC;
-		WriteProcessMemory(pi.hProcess, (void*)dwStartAddress,&cInstruction, 1, &dwReadBytes);
-		FlushInstructionCache(pi.hProcess,(void*)dwStartAddress,1);
+		WriteProcessMemory(pi.hProcess, (void*)dwStartAddress,&cInstruction, 1, &lpNumberOfBytesRead);
+		FlushInstructionCache(pi.hProcess, (void*)dwStartAddress, 1);
 	}
 }
 
 void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 {
+	Write(WriteLevel::Debug, L"Retriving call stack");
+
+	if (hThread == INVALID_HANDLE_VALUE && hProcess == INVALID_HANDLE_VALUE)
+	{
+		Write(WriteLevel::Error, L"Handles are invalid");
+		return;
+	}
+
 	// Initialize 'stack' with some required stuff.
 	STACKFRAME64 stack={0};
-
 	CONTEXT context = {0};
-	context.ContextFlags = CONTEXT_FULL;
 
+	context.ContextFlags = CONTEXT_FULL;
 
 #ifdef _X86_
 	stack.AddrPC.Offset = context.Eip; // EIP - Instruction Pointer
@@ -510,6 +507,7 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 
 	GetThreadContext(hThread, &context);
 
+	Write(WriteLevel::Info, L"About to walk the stack");
 	BOOL res = StackWalk64(
 //			IMAGE_FILE_MACHINE_I386,
 			IMAGE_FILE_MACHINE_AMD64,
@@ -526,6 +524,7 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 	{
 		Write(WriteLevel::Info, L"StackWalk64 failed");
 	}
+
 	IMAGEHLP_MODULE64 module={0};
 	module.SizeOfStruct = sizeof(module);
 
@@ -546,7 +545,6 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 
 	Write(WriteLevel::Debug, L"linenumbers=%x", module.LineNumbers);
 
-
 //	DWORD add = GetStartAddress(hProcess, hThread, "mainCRTStartup");
 //	printf("maincrtstartup = 0x%x \n", add);
 //
@@ -554,11 +552,10 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 //	printf("maincrtstartup = 0x%x \n", add);
 }
 
-
 //
 // Get the address of a given function name
 //
-DWORD GetStartAddress(HANDLE hProcess, CHAR * funName)
+ULONG64 GetStartAddress(HANDLE hProcess, CHAR * funName)
 {
 	SYMBOL_INFO *pSymbol;
 
@@ -569,9 +566,10 @@ DWORD GetStartAddress(HANDLE hProcess, CHAR * funName)
 	SymFromName(hProcess, funName, pSymbol);
 
 	// Store address, before deleting pointer
-	DWORD dwAddress = pSymbol->Address;
+	ULONG64 /* DWORD */ dwAddress = pSymbol->Address;
 
 	delete [](BYTE*)pSymbol; // Valid syntax!
 
 	return dwAddress;
 }
+

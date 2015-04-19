@@ -3,7 +3,8 @@ enum class WriteLevel
 {
 	Debug = 0,
 	Info,
-	Output
+	Output,
+	Error
 };
 
 extern WriteLevel gWriteLevelThreshold;

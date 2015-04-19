@@ -5,5 +5,5 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de);
 void GetProcessInfo(HANDLE hProcess);
 void RetrieveCallstack(HANDLE hThread, HANDLE hProcess);
 void Run();
-DWORD GetStartAddress(HANDLE hProcess, CHAR * funName);
+ULONG64 GetStartAddress(HANDLE hProcess, CHAR * funName);
 
