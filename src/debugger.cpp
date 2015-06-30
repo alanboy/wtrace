@@ -41,97 +41,28 @@ int nSpawnedProcess;
 bool bSyminitialized;
 
 void printStack( void );
+void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess);
+void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
+void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
+
 
 #define STACKWALK_MAX_NAMELEN 1024
-  typedef struct CallstackEntry
-  {
-    DWORD64 offset;  // if 0, we have no valid entry
-    CHAR name[STACKWALK_MAX_NAMELEN];
-    CHAR undName[STACKWALK_MAX_NAMELEN];
-    CHAR undFullName[STACKWALK_MAX_NAMELEN];
-    DWORD64 offsetFromSmybol;
-    DWORD offsetFromLine;
-    DWORD lineNumber;
-    CHAR lineFileName[STACKWALK_MAX_NAMELEN];
-    DWORD symType;
-    LPCSTR symTypeString;
-    CHAR moduleName[STACKWALK_MAX_NAMELEN];
-    DWORD64 baseOfImage;
-    CHAR loadedImageName[STACKWALK_MAX_NAMELEN];
-  } CallstackEntry;
-
-void GetProcessInfo(HANDLE hProcess)
+typedef struct CallstackEntry
 {
-	ENTER_FN
-
-	PROCESS_BASIC_INFORMATION pinfo;
-	ULONG resLen;
-	BOOL result;
-
-	NTSTATUS status = NtQueryInformationProcess(
-			hProcess,
-			PROCESSINFOCLASS::ProcessBasicInformation,
-			(PVOID)&pinfo,
-			sizeof(PVOID)*6,
-			&resLen);
-
-	if (status != 0)
-	{
-		Write(WriteLevel::Error, L"NtQueryInformationProcess failed 0x%x", status);
-		goto Exit;
-	}
-
-	PPEB ppeb = (PPEB)((PVOID*)&pinfo)[1];
-	PPEB ppebCopy = (PPEB)malloc(sizeof(PEB));
-
-	result = ReadProcessMemory(hProcess,
-			ppeb,
-			ppebCopy,
-			sizeof(PEB),
-			NULL);
-	if (result == 0)
-	{
-		Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
-		goto Exit;
-	}
-
-	PRTL_USER_PROCESS_PARAMETERS pRtlProcParam = ppebCopy->ProcessParameters;
-	PRTL_USER_PROCESS_PARAMETERS pRtlProcParamCopy = (PRTL_USER_PROCESS_PARAMETERS)malloc(sizeof(RTL_USER_PROCESS_PARAMETERS));
-
-	result = ReadProcessMemory(hProcess,
-								pRtlProcParam,
-								pRtlProcParamCopy,
-								sizeof(RTL_USER_PROCESS_PARAMETERS),
-								NULL);
-	if (result == 0)
-	{
-		Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
-		goto Exit;
-	}
-
-	PWSTR wBuffer = pRtlProcParamCopy->CommandLine.Buffer;
-	USHORT len =  pRtlProcParamCopy->CommandLine.Length;
-	PWSTR wBufferCopy = (PWSTR)malloc(len);
-
-	result = ReadProcessMemory(hProcess,
-								wBuffer,
-								wBufferCopy, // command line goes here
-								len,
-								NULL);
-	if (result == 0)
-	{
-		Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
-		goto Exit;
-	}
-
-	//if (gFp)
-	//	fwprintf( gFp, L" %s\n", wBufferCopy );
-
-Exit:
-	EXIT_FN
-
-	return;
-}
+	DWORD64 offset;  // if 0, we have no valid entry
+	CHAR name[STACKWALK_MAX_NAMELEN];
+	CHAR undName[STACKWALK_MAX_NAMELEN];
+	CHAR undFullName[STACKWALK_MAX_NAMELEN];
+	DWORD64 offsetFromSmybol;
+	DWORD offsetFromLine;
+	DWORD lineNumber;
+	CHAR lineFileName[STACKWALK_MAX_NAMELEN];
+	DWORD symType;
+	LPCSTR symTypeString;
+	CHAR moduleName[STACKWALK_MAX_NAMELEN];
+	DWORD64 baseOfImage;
+	CHAR loadedImageName[STACKWALK_MAX_NAMELEN];
+} CallstackEntry;
 
 void DumpContext(const CONTEXT& lcContext)
 {
@@ -158,12 +89,10 @@ void Run()
 {
 	ENTER_FN
 
-	CONTEXT lcContext;
 	DEBUG_EVENT de = {0};
 	int bCreateProcRes;
 	HRESULT hr;
 	STARTUPINFOW si;
-	bool firstDebugEvent = 1;
 	PROCESS_INFORMATION pi;
 	bSyminitialized = FALSE;
 	g_dwStartAddress = 0;
@@ -218,57 +147,7 @@ void Run()
 						break;
 
 						case EXCEPTION_BREAKPOINT:
-						if (firstDebugEvent)
-						{
-							// First chance: Display the current instruction and register values.
-							Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT (first) ignoring...");
-							firstDebugEvent = 0;
-						}
-						else
-						{
-							Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
-							Write(WriteLevel::Debug, L"Start address=%x", g_dwStartAddress);
-
-							lcContext.ContextFlags = CONTEXT_ALL;
-							BOOL bResult = GetThreadContext(pi.hThread, &lcContext);
-							if (!bResult)
-							{
-								Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-								return;
-							}
-
-							DumpContext(lcContext);
-
-							RetrieveCallstack(
-								pi.hThread,
-								pi.hProcess);
-
-							char c;
-							scanf("%c", &c);
-							if (c=='q') return;
-
-							// This does not work when you have a physical DebugBreak() in the code
-//							Write(WriteLevel::Debug, L"Instruction pointer minus 1");
-//#ifdef _X86_
-//							lcContext.Eip--;
-//#else
-//							lcContext.Rip--;
-//#endif
-
-							Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-							lcContext.EFlags |= 0x100;
-							SetThreadContext(pi.hThread, &lcContext);
-
-							if (m_OriginalInstruction != 0)
-							{
-								Write(WriteLevel::Debug, L"Writing back original instruction ");
-								SIZE_T lNumberOfBytesRead ;
-								WriteProcessMemory(pi.hProcess, g_dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
-								FlushInstructionCache(pi.hProcess, g_dwStartAddress, 1);
-								m_OriginalInstruction = 0;
-							}
-						}
-
+							ExceptionBreakpoint(pi.hThread, pi.hProcess);
 						break;
 
 						case EXCEPTION_DATATYPE_MISALIGNMENT: 
@@ -279,40 +158,7 @@ void Run()
 						break;
 
 						case EXCEPTION_SINGLE_STEP:
-							// First chance: Update the display of the 
-							// current instruction and register values. 
-							if (gAnalysisLevel >= 3)
-							{
-								lcContext.ContextFlags = CONTEXT_ALL;
-								BOOL bResult = GetThreadContext(pi.hThread, &lcContext);
-								if (!bResult)
-								{
-									Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-									return;
-								}
-
-								DumpContext(lcContext);
-
-                                if (IsDebuggerPresent())
-								{
-									//DebugBreak();
-								}
-
-								lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-								bResult = SetThreadContext(pi.hThread, &lcContext);
-								if (!bResult)
-								{
-									Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-									return;
-								}
-
-								RetrieveCallstack(
-									pi.hThread,
-									pi.hProcess);
-
-								//gAnalysisLevel = 0;
-							}
-
+							ExceptionSingleStep(pi.hProcess, pi.hThread);
 						break;
  
 						case DBG_CONTROL_C:
@@ -444,6 +290,45 @@ void DebugStringEvent(const DEBUG_EVENT& de)
 	EXIT_FN
 }
 
+void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
+{
+	CONTEXT lcContext = {0};
+
+	// First chance: Update the display of the 
+	// current instruction and register values. 
+	if (gAnalysisLevel >= 3)
+	{
+		lcContext.ContextFlags = CONTEXT_ALL;
+		BOOL bResult = GetThreadContext(hThread, &lcContext);
+		if (!bResult)
+		{
+			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
+			return;
+		}
+
+		//DumpContext(lcContext);
+
+		if (IsDebuggerPresent())
+		{
+			//DebugBreak();
+		}
+
+		lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+		bResult = SetThreadContext(hThread, &lcContext);
+		if (!bResult)
+		{
+			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
+			return;
+		}
+
+		GetCurrentFunctionName(
+				hThread,
+				hProcess);
+
+		//gAnalysisLevel = 0;
+	}
+}
+
 void LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 {
 	ENTER_FN
@@ -498,7 +383,7 @@ Exit:
 
 void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 {
-    ENTER_FN
+	ENTER_FN
 
 	LPCREATE_PROCESS_DEBUG_INFO pCreateProcessDebugInfo = (LPCREATE_PROCESS_DEBUG_INFO)&de.u.CreateProcessInfo;
 
@@ -605,7 +490,8 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	//
 	// Insert a break point by replacing the first instruction
 	//
-	if (0,0 /*fInsertBreakPoint*/)
+	BOOL bInsertBreakPoint = TRUE;
+	if (bInsertBreakPoint)
 	{
 		// Read the first instruction and save it
 		int result = ReadProcessMemory(
@@ -637,7 +523,80 @@ Exit:
 	EXIT_FN
 }
 
-void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
+
+bool firstDebugEvent = 1;
+void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
+{
+	CONTEXT lcContext;
+
+	if (firstDebugEvent)
+	{
+		// First chance: Display the current instruction and register values.
+		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT (first) ignoring...");
+		firstDebugEvent = 0;
+	}
+	else
+	{
+		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
+		Write(WriteLevel::Debug, L"Start address=%x", g_dwStartAddress);
+
+		lcContext.ContextFlags = CONTEXT_ALL;
+		BOOL bResult = GetThreadContext(hThread, &lcContext);
+		if (!bResult)
+		{
+			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
+			return;
+		}
+
+		DumpContext(lcContext);
+
+		GetCurrentFunctionName(hThread, hProcess);
+
+		// This does not work when you have a physical DebugBreak() in the code
+		Write(WriteLevel::Debug, L"Instruction pointer minus 1");
+#ifdef _X86_
+		lcContext.Eip--;
+#else
+		lcContext.Rip--;
+#endif
+
+		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+		lcContext.EFlags |= 0x100;
+		SetThreadContext(hThread, &lcContext);
+
+		if (m_OriginalInstruction != 0)
+		{
+			Write(WriteLevel::Debug, L"Writing back original instruction ");
+			SIZE_T lNumberOfBytesRead ;
+			WriteProcessMemory(hProcess, g_dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+			FlushInstructionCache(hProcess, g_dwStartAddress, 1);
+			m_OriginalInstruction = 0;
+		}
+	}
+}
+
+std::string lastFunctionName;
+long lnFunctionCalls = 0;
+void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess)
+{
+	std::string sFuntionName;
+
+	RetrieveCallstack(hThread, hProcess, 1, &sFuntionName); //1 means one frame
+
+	if (sFuntionName.compare(lastFunctionName) == 0)
+	{
+		return;
+	}
+	else
+	{
+		lnFunctionCalls++;
+		printf(" F %d : %s\n",lnFunctionCalls, sFuntionName.c_str());
+		lastFunctionName = sFuntionName;
+	}
+
+}
+
+void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::string* sFuntionName)
 {
 	ENTER_FN
 
@@ -689,7 +648,7 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 //	Module.SizeOfStruct = sizeof(Module);
 
 	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", hProcess);
-	
+
 	if (FALSE == bSyminitialized)
 	{
 		bSyminitialized = TRUE;
@@ -706,7 +665,7 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 	}
 
   	int frameNum;
-	for (frameNum = 0; ; ++frameNum )
+	for (frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
 		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
 
@@ -724,7 +683,7 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 		if (FALSE == bResult)
 		{
 			// INFO: "StackWalk64" does not set "GetLastError"...
-			Write(WriteLevel::Error, L"StackWalk64 failed");
+			Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", GetLastError());
 			goto Exit;
 		}
 
@@ -752,9 +711,11 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 				UnDecorateSymbolName(pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY );
 				UnDecorateSymbolName(pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE );
 
-                printf("SymbolName: %s\n", pSym->Name);
-				//Write(WriteLevel::Info, L"SymbolName: %s", pSym->Name);
-				//Write(WriteLevel::Info, L"SymbolName: %s", csEntry.undName);
+				if (sFuntionName != NULL)
+				{
+					// Copy into caller
+					*sFuntionName = pSym->Name;
+				}
 			}
 			else
 			{
@@ -767,162 +728,8 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 		}
 	}
 
-
-/*
-	BOOL bResult;
-	BOOL bSuccess;
-	CONTEXT context = {0};
-	IMAGEHLP_MODULE64 module={0};
-    IMAGEHLP_SYMBOL64 symbol;
-	STACKFRAME64 stack = {0};
-
-	if (hThread == INVALID_HANDLE_VALUE
-			|| hProcess == INVALID_HANDLE_VALUE)
-	{
-		Write(WriteLevel::Error, L"Handles are invalid");
-		goto Exit;
-	}
-
-	context.ContextFlags = CONTEXT_FULL;
-
-
-	bResult = StackWalk64(
-			IMAGE_FILE_MACHINE_AMD64, // IMAGE_FILE_MACHINE_I386,
-			hProcess,
-			hThread,
-			&stack,
-			&context,
-			NULL,//		_ProcessMemoryReader,
-			SymFunctionTableAccess64,
-			SymGetModuleBase64,
-			NULL);
-
-	if (!bResult)
-	{
-
-		// INFO: "StackWalk64" does not set "GetLastError"...
-		Write(WriteLevel::Error, L"StackWalk64 failed");
-		goto Exit;
-	}
-
-	symbol.SizeOfStruct = sizeof(module);
-	symbol.MaxNameLength = 255;
-
-	char name[ 256 ];
-	DWORD64             displacement;
-	SymGetSymFromAddr64( hProcess, (ULONG64)stack.AddrPC.Offset, &displacement, &symbol );
-	UnDecorateSymbolName( symbol.Name, ( PSTR )name, 256, UNDNAME_COMPLETE );
-
-	//DebugBreak();
-	printf("%s\n", name);
-
-	//printStack();
-
-	bSuccess = SymGetModuleInfo64(
-			hProcess,
-			(DWORD64)stack.AddrPC.Offset,
-			&module);
-
-	if (bSuccess && module.SymType == SymPdb)
-	{
-		Write(WriteLevel::Info, L"Symbols loaded !!");
-		//also know if source code, check the module_info
-	}
-	else
-	{
-
-		Write(WriteLevel::Error, L"SymGetModuleInfo64 for hProcess=0x%x failed with 0x%x", hProcess, GetLastError());
-		goto Exit;
-	}
-
-	Write(WriteLevel::Debug, L"linenumbers=%x", module.LineNumbers);
-	*/
-
-//	DWORD add = GetStartAddress(hProcess, hThread, "mainCRTStartup");
-//	printf("maincrtstartup = 0x%x \n", add);
-//
-//	add = GetStartAddress(hProcess, hThread, "LauraFun");
-//	printf("maincrtstartup = 0x%x \n", add);
-
 Exit:
 	EXIT_FN
-}
-
-void printStack( void )
-{
-    BOOL                result;
-    HANDLE              process;
-    HANDLE              thread;
-    CONTEXT             context;
-    STACKFRAME64        stack;
-    ULONG               frame;
-    IMAGEHLP_SYMBOL64   symbol;
-    DWORD64             displacement;
-    char name[ 256 ];
-
-    RtlCaptureContext( &context );
-    memset( &stack, 0, sizeof( STACKFRAME64 ) );
-
-    process                = GetCurrentProcess();
-    thread                 = GetCurrentThread();
-    displacement           = 0;
-
-#ifdef _X86_
-	stack.AddrPC.Offset = context.Eip;    // EIP - Instruction Pointer
-	stack.AddrFrame.Offset = context.Ebp; // EBP
-	stack.AddrStack.Offset = context.Esp; // ESP - Stack Pointer
-#else
-	stack.AddrPC.Offset = context.Rip;    // EIP - Instruction Pointer
-	stack.AddrFrame.Offset = context.Rbp; // EBP
-	stack.AddrStack.Offset = context.Rsp; // ESP - Stack Pointer
-#endif
-
-	// Must be like this
-	stack.AddrPC.Mode = AddrModeFlat;
-	stack.AddrFrame.Mode = AddrModeFlat;
-	stack.AddrStack.Mode = AddrModeFlat;
- 
-
-    for( frame = 0; ; frame++ )
-    {
-        result = StackWalk64 (
-            IMAGE_FILE_MACHINE_AMD64,
-            process,
-            thread,
-            &stack,
-            &context,
-            NULL,
-            SymFunctionTableAccess64,
-            SymGetModuleBase64,
-            NULL
-        );
-
-        symbol.SizeOfStruct  = sizeof( IMAGEHLP_SYMBOL64 );
-        symbol.MaxNameLength = 255;
-
-        SymGetSymFromAddr64( process, ( ULONG64 )stack.AddrPC.Offset, &displacement, &symbol );
-        UnDecorateSymbolName( symbol.Name, ( PSTR )name, 256, UNDNAME_COMPLETE );
-
-        printf
-        (
-            "Frame %lu:\n"
-            "    Symbol name:    %s\n"
-            "    PC address:     0x%08LX\n"
-            "    Stack address:  0x%08LX\n"
-            "    Frame address:  0x%08LX\n"
-            "\n",
-            frame,
-            symbol.Name,
-            ( ULONG64 )stack.AddrPC.Offset,
-            ( ULONG64 )stack.AddrStack.Offset,
-            ( ULONG64 )stack.AddrFrame.Offset
-        );
-
-        if( !result )
-        {
-            break;
-        }
-    }
 }
 
 //

@@ -24,6 +24,78 @@ wchar_t *gOutputFile;
 wchar_t *gpCommandLine;
 FILE * gFileHandle;
 
+//void GetProcessInfo(HANDLE hProcess)
+//{
+//	ENTER_FN
+//
+//	PROCESS_BASIC_INFORMATION pinfo;
+//	ULONG resLen;
+//	BOOL result;
+//
+//	NTSTATUS status = NtQueryInformationProcess(
+//			hProcess,
+//			PROCESSINFOCLASS::ProcessBasicInformation,
+//			(PVOID)&pinfo,
+//			sizeof(PVOID)*6,
+//			&resLen);
+//
+//	if (status != 0)
+//	{
+//		Write(WriteLevel::Error, L"NtQueryInformationProcess failed 0x%x", status);
+//		goto Exit;
+//	}
+//
+//	PPEB ppeb = (PPEB)((PVOID*)&pinfo)[1];
+//	PPEB ppebCopy = (PPEB)malloc(sizeof(PEB));
+//
+//	result = ReadProcessMemory(hProcess,
+//			ppeb,
+//			ppebCopy,
+//			sizeof(PEB),
+//			NULL);
+//	if (result == 0)
+//	{
+//		Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
+//		goto Exit;
+//	}
+//
+//	PRTL_USER_PROCESS_PARAMETERS pRtlProcParam = ppebCopy->ProcessParameters;
+//	PRTL_USER_PROCESS_PARAMETERS pRtlProcParamCopy = (PRTL_USER_PROCESS_PARAMETERS)malloc(sizeof(RTL_USER_PROCESS_PARAMETERS));
+//
+//	result = ReadProcessMemory(hProcess,
+//								pRtlProcParam,
+//								pRtlProcParamCopy,
+//								sizeof(RTL_USER_PROCESS_PARAMETERS),
+//								NULL);
+//	if (result == 0)
+//	{
+//		Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
+//		goto Exit;
+//	}
+//
+//	PWSTR wBuffer = pRtlProcParamCopy->CommandLine.Buffer;
+//	USHORT len =  pRtlProcParamCopy->CommandLine.Length;
+//	PWSTR wBufferCopy = (PWSTR)malloc(len);
+//
+//	result = ReadProcessMemory(hProcess,
+//								wBuffer,
+//								wBufferCopy, // command line goes here
+//								len,
+//								NULL);
+//	if (result == 0)
+//	{
+//		Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
+//		goto Exit;
+//	}
+//
+//	//if (gFp)
+//	//	fwprintf( gFp, L" %s\n", wBufferCopy );
+//
+//Exit:
+//	EXIT_FN
+//
+//	return;
+//}
 //
 // This was taken from 
 // http://msdn.microsoft.com/en-us/library/windows/desktop/aa366789(v=vs.85).aspx
