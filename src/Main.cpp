@@ -73,6 +73,11 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 			i++;
 			gAnalysisLevel = _wtoi(argv[i]);
 		}
+		else if (CMPSTR(argv[i], L"-debugbreak"))
+		{
+			Write(WriteLevel::Output, L"About to call DebugBreak");
+			DebugBreak();
+		}
 	}
 
 	// The last argument is the command line to trace

@@ -9,5 +9,6 @@ enum class WriteLevel
 
 extern WriteLevel gWriteLevelThreshold;
 extern FILE * gFp;
+extern int dFunctionDepth;
 
 void Write(WriteLevel level, const WCHAR * lineFormat, ...);
