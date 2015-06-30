@@ -75,8 +75,10 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 		}
 		else if (CMPSTR(argv[i], L"-debugbreak"))
 		{
+			*pfExitProgram = true;
 			Write(WriteLevel::Output, L"About to call DebugBreak");
 			DebugBreak();
+
 		}
 	}
 

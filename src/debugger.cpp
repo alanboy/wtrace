@@ -38,6 +38,7 @@ BYTE m_OriginalInstruction;
 DWORD processNameLen;
 LPVOID g_dwStartAddress;
 int nSpawnedProcess;
+bool bSyminitialized;
 
 void printStack( void );
 
@@ -135,7 +136,7 @@ Exit:
 void DumpContext(const CONTEXT& lcContext)
 {
 #ifdef _X86_
-	Write(WriteLevel::Info, L"EXCEPTION_SINGLE_STEP: IP=0x%x Instruction=0x%x",
+	Write(WriteLevel::Info, L" IP=0x%x Instruction=0x%x",
 			lcContext.Eip,
 			*lcContext.Eip,
 		 );
@@ -164,7 +165,7 @@ void Run()
 	STARTUPINFOW si;
 	bool firstDebugEvent = 1;
 	PROCESS_INFORMATION pi;
-
+	bSyminitialized = FALSE;
 	g_dwStartAddress = 0;
 
 	// Ref count of processes created
@@ -242,17 +243,17 @@ void Run()
 								pi.hThread,
 								pi.hProcess);
 
-							system("PAUSE");
-
 							char c;
 							scanf("%c", &c);
 							if (c=='q') return;
 
-#ifdef _X86_
-							lcContext.Eip--;
-#else
-							lcContext.Rip--;
-#endif
+							// This does not work when you have a physical DebugBreak() in the code
+//							Write(WriteLevel::Debug, L"Instruction pointer minus 1");
+//#ifdef _X86_
+//							lcContext.Eip--;
+//#else
+//							lcContext.Rip--;
+//#endif
 
 							Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
 							lcContext.EFlags |= 0x100;
@@ -260,8 +261,8 @@ void Run()
 
 							if (m_OriginalInstruction != 0)
 							{
-								SIZE_T lNumberOfBytesRead ;
 								Write(WriteLevel::Debug, L"Writing back original instruction ");
+								SIZE_T lNumberOfBytesRead ;
 								WriteProcessMemory(pi.hProcess, g_dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
 								FlushInstructionCache(pi.hProcess, g_dwStartAddress, 1);
 								m_OriginalInstruction = 0;
@@ -305,9 +306,9 @@ void Run()
 									return;
 								}
 
-								//RetrieveCallstack(
-								//	pi.hThread,
-								//	pi.hProcess);
+								RetrieveCallstack(
+									pi.hThread,
+									pi.hProcess);
 
 								//gAnalysisLevel = 0;
 							}
@@ -635,82 +636,6 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 Exit:
 	EXIT_FN
 }
-/*
-void RetrieveCallstack2(HANDLE hThread, HANDLE hProcess)
-{
-	ENTER_FN
-
-	BOOL bResult;
-//	BOOL bSuccess;
-	CONTEXT context = {0};
-//	IMAGEHLP_MODULE64 module={0};
-    IMAGEHLP_SYMBOL64 symbol;
-	STACKFRAME64 stack = {0};
-
-	if (hThread == INVALID_HANDLE_VALUE
-			|| hProcess == INVALID_HANDLE_VALUE)
-	{
-		Write(WriteLevel::Error, L"Handles are invalid");
-		goto Exit;
-	}
-
-	context.ContextFlags = CONTEXT_FULL;
-
-#ifdef _X86_
-	stack.AddrPC.Offset = context.Eip;    // EIP - Instruction Pointer
-	stack.AddrFrame.Offset = context.Ebp; // EBP
-	stack.AddrStack.Offset = context.Esp; // ESP - Stack Pointer
-#else
-	stack.AddrPC.Offset = context.Rip;    // EIP - Instruction Pointer
-	stack.AddrFrame.Offset = context.Rbp; // EBP
-	stack.AddrStack.Offset = context.Rsp; // ESP - Stack Pointer
-#endif
-
-	// Must be like this
-	stack.AddrPC.Mode = AddrModeFlat;
-	stack.AddrFrame.Mode = AddrModeFlat;
-	stack.AddrStack.Mode = AddrModeFlat;
- 
-	bResult = GetThreadContext(hThread, &context);
-	if (!bResult)
-	{
-		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-		goto Exit;
-	}
-
-	Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
-
-	bResult = StackWalk64(
-			IMAGE_FILE_MACHINE_AMD64, // IMAGE_FILE_MACHINE_I386,
-			hProcess,
-			hThread,
-			&stack,
-			&context,
-			NULL,//		_ProcessMemoryReader,
-			SymFunctionTableAccess64,
-			SymGetModuleBase64,
-			NULL);
-
-	if (!bResult)
-	{
-
-		// INFO: "StackWalk64" does not set "GetLastError"...
-		Write(WriteLevel::Error, L"StackWalk64 failed");
-		goto Exit;
-	}
-
-	//symbol.SizeOfStruct = sizeof(module);
-	symbol.MaxNameLength = 255;
-
-	char name[ 256 ];
-	DWORD64             displacement;
-	SymGetSymFromAddr64( hProcess, (ULONG64)stack.AddrPC.Offset, &displacement, &symbol );
-	UnDecorateSymbolName( symbol.Name, ( PSTR )name, 256, UNDNAME_COMPLETE );
-
-
-Exit:
-	EXIT_FN
-}*/
 
 void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 {
@@ -764,17 +689,22 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess)
 //	Module.SizeOfStruct = sizeof(Module);
 
 	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", hProcess);
-	BOOL bRes = SymInitialize(hProcess, NULL, TRUE);
-	if (FALSE == bRes)
+	
+	if (FALSE == bSyminitialized)
 	{
-		DWORD error = GetLastError();
-		if (error != ERROR_SUCCESS)
+		bSyminitialized = TRUE;
+		BOOL bRes = SymInitialize(hProcess, NULL, TRUE);
+		if (FALSE == bRes)
 		{
-			Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
-			goto Exit;
+			DWORD error = GetLastError();
+			if (error != ERROR_SUCCESS)
+			{
+				Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
+				goto Exit;
+			}
 		}
 	}
-	
+
   	int frameNum;
 	for (frameNum = 0; ; ++frameNum )
 	{
