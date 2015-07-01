@@ -24,6 +24,31 @@ wchar_t *gOutputFile;
 wchar_t *gpCommandLine;
 FILE * gFileHandle;
 
+//
+// Get the address of a given function name
+//
+//ULONG64 GetStartAddress(HANDLE hProcess, CHAR * funName)
+//{
+//	ENTER_FN
+//
+//	SYMBOL_INFO *pSymbol;
+//
+//	pSymbol = (SYMBOL_INFO *)new BYTE[sizeof(SYMBOL_INFO )+MAX_SYM_NAME];
+//	pSymbol->SizeOfStruct= sizeof(SYMBOL_INFO );
+//	pSymbol->MaxNameLen = MAX_SYM_NAME;
+//
+//	SymFromName(hProcess, funName, pSymbol);
+//
+//	// Store address, before deleting pointer
+//	ULONG64 /* DWORD */ dwAddress = pSymbol->Address;
+//
+//	delete [](BYTE*)pSymbol; // Valid syntax!
+//
+//	EXIT_FN
+//
+//	return dwAddress;
+//}
+//
 //void GetProcessInfo(HANDLE hProcess)
 //{
 //	ENTER_FN

@@ -37,7 +37,7 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 	{
 		if (CMPSTR(argv[i], L"-?"))
 		{
-			Usage();
+			WtraceUsage();
 			*pfExitProgram = TRUE;
 		}
 		else if (CMPSTR(argv[i], L"-o"))
@@ -90,7 +90,7 @@ Exit:
 	return;
 }
 
-void Usage(void)
+void WtraceUsage(void)
 {
 	printf("wtrace [options] cmd\n");
 	printf("\t-?           show help\n");

@@ -39,11 +39,10 @@ DWORD processNameLen;
 LPVOID g_dwStartAddress;
 int nSpawnedProcess;
 bool bSyminitialized;
+bool firstDebugEvent = 1;
+std::string lastFunctionName;
+long lnFunctionCalls = 0;
 
-void printStack( void );
-void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess);
-void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
-void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
 
 
 #define STACKWALK_MAX_NAMELEN 1024
@@ -245,14 +244,12 @@ void Run()
 	}
 	else
 	{
-		Write(WriteLevel::Output, L"Unable to create process.");
-		DWORD creatProcessErr = GetLastError();
-		printf("%x\n", creatProcessErr );
+		Write(WriteLevel::Error, L"Unable to create process. hr=0x%x", GetLastError());
 	}
 
 	DWORD TickDiff = GetTickCount() - StartTicks;
 
-	Write(WriteLevel::Output, L"Finished after %d milliseconds ", TickDiff );
+	Write(WriteLevel::Output, L"Finished after %d seconds ", TickDiff/1000 );
 
 	EXIT_FN
 }
@@ -261,8 +258,8 @@ void DebugStringEvent(const DEBUG_EVENT& de)
 {
 	ENTER_FN
 
-    HANDLE hProcess = NULL;// THis will not work!
-    DebugBreak();
+	HANDLE hProcess = NULL;// THis will not work!
+
 	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
 
 	WCHAR *msg = new WCHAR[DebugString.nDebugStringLength];
@@ -281,17 +278,19 @@ void DebugStringEvent(const DEBUG_EVENT& de)
 	}
 	else
 	{
-		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: %s", gpCommandLine);
+		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: ");
 	
 	}
 
-	delete []msg;
+	delete [] msg;
 
 	EXIT_FN
 }
 
 void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 {
+	ENTER_FN
+
 	CONTEXT lcContext = {0};
 
 	// First chance: Update the display of the 
@@ -299,26 +298,28 @@ void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 	if (gAnalysisLevel >= 3)
 	{
 		lcContext.ContextFlags = CONTEXT_ALL;
+
 		BOOL bResult = GetThreadContext(hThread, &lcContext);
 		if (!bResult)
 		{
 			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-			return;
+			goto Exit;
 		}
 
-		//DumpContext(lcContext);
+//		DumpContext(lcContext);
 
-		if (IsDebuggerPresent())
-		{
-			//DebugBreak();
-		}
+//		if (IsDebuggerPresent())
+//		{
+//			//DebugBreak();
+//		}
 
 		lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+
 		bResult = SetThreadContext(hThread, &lcContext);
 		if (!bResult)
 		{
 			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-			return;
+			goto Exit;
 		}
 
 		GetCurrentFunctionName(
@@ -327,6 +328,9 @@ void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 
 		//gAnalysisLevel = 0;
 	}
+
+Exit:
+	EXIT_FN
 }
 
 void LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
@@ -524,9 +528,10 @@ Exit:
 }
 
 
-bool firstDebugEvent = 1;
 void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 {
+	ENTER_FN
+
 	CONTEXT lcContext;
 
 	if (firstDebugEvent)
@@ -545,7 +550,7 @@ void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		if (!bResult)
 		{
 			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-			return;
+			goto Exit;
 		}
 
 		DumpContext(lcContext);
@@ -573,35 +578,45 @@ void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 			m_OriginalInstruction = 0;
 		}
 	}
+
+Exit:
+	EXIT_FN
 }
 
-std::string lastFunctionName;
-long lnFunctionCalls = 0;
 void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess)
 {
-	std::string sFuntionName;
 
-	RetrieveCallstack(hThread, hProcess, 1, &sFuntionName); //1 means one frame
+	ENTER_FN
+
+	std::string sFuntionName;
+	DWORD64 instructionPointer;
+
+	RetrieveCallstack(hThread, hProcess, 1, &sFuntionName, &instructionPointer); //1 means one frame
 
 	if (sFuntionName.compare(lastFunctionName) == 0)
 	{
-		return;
+		goto Exit;
 	}
 	else
 	{
 		lnFunctionCalls++;
-		printf(" F %d : %s\n",lnFunctionCalls, sFuntionName.c_str());
+
+		printf("0x%x %d : %s\n", instructionPointer, lnFunctionCalls, sFuntionName.c_str());
+
 		lastFunctionName = sFuntionName;
 	}
 
+Exit:
+	EXIT_FN
 }
 
-void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::string* sFuntionName)
+void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
 {
 	ENTER_FN
 
 	CONTEXT context = {0};
 	STACKFRAME64 stack = {0};
+	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	CallstackEntry csEntry;
 
 	if (hThread == INVALID_HANDLE_VALUE
@@ -630,22 +645,16 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::
 	stack.AddrStack.Offset = context.Rsp; // ESP - Stack Pointer
 #endif
 
+	*ip = stack.AddrPC.Offset;
+
 	// Must be like this
 	stack.AddrPC.Mode = AddrModeFlat;
 	stack.AddrFrame.Mode = AddrModeFlat;
 	stack.AddrStack.Mode = AddrModeFlat;
 
-	IMAGEHLP_SYMBOL64 *pSym = NULL;
-	pSym = (IMAGEHLP_SYMBOL64 *) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+	pSym = (IMAGEHLP_SYMBOL64*) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
 	pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
 	pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
-
-	IMAGEHLP_LINE64 Line;
-	memset(&Line, 0, sizeof(Line));
-	Line.SizeOfStruct = sizeof(Line);
-
-//	memset(&Module, 0, sizeof(Module));
-//	Module.SizeOfStruct = sizeof(Module);
 
 	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", hProcess);
 
@@ -664,8 +673,7 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::
 		}
 	}
 
-  	int frameNum;
-	for (frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
+	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
 		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
 
@@ -707,9 +715,9 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::
 										&(csEntry.offsetFromSmybol),
 										pSym) != FALSE)
 			{
-				//MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
-				UnDecorateSymbolName(pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY );
-				UnDecorateSymbolName(pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE );
+				// Undecorate names:
+				//UnDecorateSymbolName(pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY );
+				//UnDecorateSymbolName(pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE );
 
 				if (sFuntionName != NULL)
 				{
@@ -719,7 +727,6 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::
 			}
 			else
 			{
-				//this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), s.AddrPC.Offset);
 				Write(WriteLevel::Error,
 							L"SymGetSymFromAddr64 failed 0x%x, s.AddrPC.Offset=0x%x",
 							GetLastError(),
@@ -729,31 +736,8 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::
 	}
 
 Exit:
-	EXIT_FN
-}
-
-//
-// Get the address of a given function name
-//
-ULONG64 GetStartAddress(HANDLE hProcess, CHAR * funName)
-{
-	ENTER_FN
-
-	SYMBOL_INFO *pSymbol;
-
-	pSymbol = (SYMBOL_INFO *)new BYTE[sizeof(SYMBOL_INFO )+MAX_SYM_NAME];
-	pSymbol->SizeOfStruct= sizeof(SYMBOL_INFO );
-	pSymbol->MaxNameLen = MAX_SYM_NAME;
-
-	SymFromName(hProcess, funName, pSymbol);
-
-	// Store address, before deleting pointer
-	ULONG64 /* DWORD */ dwAddress = pSymbol->Address;
-
-	delete [](BYTE*)pSymbol; // Valid syntax!
+	delete pSym;
 
 	EXIT_FN
-
-	return dwAddress;
 }
 
