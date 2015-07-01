@@ -10,8 +10,6 @@
 #include <windows.h>
 #include <stdio.h>
 #include <string>
-#include <WinBase.h>
-#include <Winternl.h>
 #include <Dbghelp.h>
 
 #include "output.h"
@@ -66,9 +64,15 @@ typedef struct CallstackEntry
 void DumpContext(const CONTEXT& lcContext)
 {
 #ifdef _X86_
-	Write(WriteLevel::Info, L" IP=0x%x Instruction=0x%x",
+	Write(WriteLevel::Info,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
+			L"RDX = %08X RSI = %08X RDI = %08X "
+			L"RSP = %08X RBP = %08X "
+			L"RFL = %08X",
 			lcContext.Eip,
-			*lcContext.Eip,
+			lcContext.Eax, lcContext.Ebx, lcContext.Ecx,
+			lcContext.Edx, lcContext.Esi, lcContext.Edi,
+			lcContext.Esp, lcContext.Ebp,
+			lcContext.EFlags
 		 );
 #else
 	Write(WriteLevel::Info,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
@@ -306,27 +310,18 @@ void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 			goto Exit;
 		}
 
-//		DumpContext(lcContext);
-
-//		if (IsDebuggerPresent())
-//		{
-//			//DebugBreak();
-//		}
+		GetCurrentFunctionName(hThread, hProcess, lcContext);
 
 		lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
 
 		bResult = SetThreadContext(hThread, &lcContext);
 		if (!bResult)
 		{
-			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
+			Write(WriteLevel::Error, L"SetThreadContext failed 0x%x", GetLastError());
 			goto Exit;
 		}
 
-		GetCurrentFunctionName(
-				hThread,
-				hProcess);
 
-		//gAnalysisLevel = 0;
 	}
 
 Exit:
@@ -542,10 +537,12 @@ void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	}
 	else
 	{
+
 		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
 		Write(WriteLevel::Debug, L"Start address=%x", g_dwStartAddress);
 
 		lcContext.ContextFlags = CONTEXT_ALL;
+
 		BOOL bResult = GetThreadContext(hThread, &lcContext);
 		if (!bResult)
 		{
@@ -555,10 +552,11 @@ void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 
 		DumpContext(lcContext);
 
-		GetCurrentFunctionName(hThread, hProcess);
+		GetCurrentFunctionName(hThread, hProcess, lcContext);
 
 		// This does not work when you have a physical DebugBreak() in the code
 		Write(WriteLevel::Debug, L"Instruction pointer minus 1");
+
 #ifdef _X86_
 		lcContext.Eip--;
 #else
@@ -567,6 +565,7 @@ void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 
 		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
 		lcContext.EFlags |= 0x100;
+
 		SetThreadContext(hThread, &lcContext);
 
 		if (m_OriginalInstruction != 0)
@@ -583,15 +582,15 @@ Exit:
 	EXIT_FN
 }
 
-void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess)
+void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context)
 {
-
 	ENTER_FN
 
 	std::string sFuntionName;
+
 	DWORD64 instructionPointer;
 
-	RetrieveCallstack(hThread, hProcess, 1, &sFuntionName, &instructionPointer); //1 means one frame
+	RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
 
 	if (sFuntionName.compare(lastFunctionName) == 0)
 	{
@@ -601,7 +600,14 @@ void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess)
 	{
 		lnFunctionCalls++;
 
-		printf("0x%x %d : %s\n", instructionPointer, lnFunctionCalls, sFuntionName.c_str());
+#ifdef _X86_
+		printf("0x%x ", (DWORD)instructionPointer);
+#else
+		printf("0x%x ", instructionPointer);
+#endif
+
+		printf("%d ", lnFunctionCalls);
+		printf("%s\n", sFuntionName.c_str());
 
 		lastFunctionName = sFuntionName;
 	}
@@ -610,11 +616,10 @@ Exit:
 	EXIT_FN
 }
 
-void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
+void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
 {
 	ENTER_FN
 
-	CONTEXT context = {0};
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	CallstackEntry csEntry;
@@ -623,15 +628,6 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::
 			|| hProcess == INVALID_HANDLE_VALUE)
 	{
 		Write(WriteLevel::Error, L"Handles are invalid");
-		goto Exit;
-	}
-
-	//Get the context
-	context.ContextFlags = CONTEXT_FULL; //USED_CONTEXT_FLAGS ?
-
-	if (GetThreadContext(hThread, &context) == FALSE)
-	{
-		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
 		goto Exit;
 	}
 
@@ -677,12 +673,16 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, int nFramesToRead, std::
 	{
 		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
 
+		//
+		// StackWalk64 only needs context when image is IMAGE_FILE_MACHINE_I386, the 
+		// context might be modified.
+		//
 		BOOL bResult = StackWalk64(
 				IMAGE_FILE_MACHINE_AMD64, // IMAGE_FILE_MACHINE_I386,
 				hProcess,
 				hThread,
 				&stack,
-				&context,
+				(PVOID)(&context), // only pass for x86
 				NULL,
 				SymFunctionTableAccess64,
 				SymGetModuleBase64,

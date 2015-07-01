@@ -7,17 +7,17 @@
  * ********************************************************** */
 #define UNICODE
 #define _UNICODE
+
 #include <windows.h>
 #include <stdio.h>
 #include <string>
-#include <WinBase.h>
-#include <Winternl.h>
+#include <Strsafe.h>
 
 #include "output.h"
 #include "Utils.h"
 #include "Debugger.h"
 #include "Main.h"
-#include <Strsafe.h>
+
 
 #define CMPSTR(X,Y) CompareStringOrdinal(##X##, -1, ##Y##, -1, TRUE) == CSTR_EQUAL
 

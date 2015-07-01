@@ -1,9 +1,11 @@
 
 
-# @TODO: Select architecture
-#	IF "$(PLATFORM)"=="X64" ( TargetPlatform=x64 ) ELSE ( TargetPlatform=x86 )
-
+!IF "$(PLATFORM)"=="X64"
 TargetPlatform=x64
+!ELSE
+TargetPlatform=x86
+!ENDIF
+
 BinDir=bin\$(TargetPlatform)
 WtraceBins=bin\$(TargetPlatform)\wtrace.exe
 
