@@ -30,7 +30,6 @@
 			dFunctionDepth--;
 
 
-
 int gAnalysisLevel;
 BYTE m_OriginalInstruction;
 DWORD processNameLen;
@@ -334,47 +333,50 @@ void LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 
 	// Read the debugging information included in the newly loaded DLL.
 	WCHAR pszFilename[MAX_PATH+1];
+	DWORD64 dwBase;
+
 	GetFileNameFromHandle(de.u.LoadDll.hFile, (WCHAR *)&pszFilename);
 
-	wchar_t *pwstrDllName;
-	pwstrDllName = pszFilename;
-	IMAGEHLP_MODULE64 module_info;
-	BOOL bSuccess;
-	DWORD64 dwBase;
+//	IMAGEHLP_MODULE64 module_info;
+//	BOOL bSuccess;
+
+	//BOOL bRes = SymInitialize(hProcess, NULL, FALSE);
 
 	Write(WriteLevel::Debug, L"SymLoadModuleEx on hProcess 0x%x", hProcess);
 	dwBase = SymLoadModuleEx(
 			hProcess,//_In_  HANDLE hProcess,
-			NULL,//_In_  HANDLE hFile,
+			de.u.LoadDll.hFile,//_In_  HANDLE hFile,
 			NULL,//_In_  PCTSTR ImageName,
 			NULL,//_In_  PCTSTR ModuleName,
-			(DWORD64)de.u.LoadDll.lpBaseOfDll,//_In_  DWORD64 BaseOfDll,
+			0, //(DWORD64)de.u.LoadDll.lpBaseOfDll,//_In_  DWORD64 BaseOfDll,
 			0,//_In_  DWORD DllSize,
 			NULL,//_In_  PMODLOAD_DATA Data,
 			0);//_In_  DWORD Flags
 
-	if (0 == dwBase)
-	{
-		Write(WriteLevel::Error, L"SymLoadModuleEx failed with 0x%x", GetLastError());
-		goto Exit;
-	}
-
-	module_info.SizeOfStruct = sizeof(module_info);
-	bSuccess = SymGetModuleInfo64(
-			hProcess,
-			dwBase,
-			&module_info);
-
-	if (!bSuccess)
-	{
-		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with %x", GetLastError());
-		goto Exit;
-	}
-
 	Write(WriteLevel::Info, L"Loaded %s at %x, symbols %s loaded",
-			pwstrDllName,
+			pszFilename,
 			de.u.LoadDll.lpBaseOfDll,
-			(bSuccess && module_info.SymType == SymPdb) ? L"" : L" NOT ");
+			 L" NOT ");
+
+//	if (0 == dwBase)
+//	{
+//		Write(WriteLevel::Error, L"SymLoadModuleEx failed with 0x%x", GetLastError());
+//		goto Exit;
+//	}
+//
+//	module_info.SizeOfStruct = sizeof(module_info);
+//	bSuccess = SymGetModuleInfo64(
+//			hProcess,
+//			dwBase,
+//			&module_info);
+//
+//
+//	if (!bSuccess)
+//	{
+//		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with %x", GetLastError());
+//		goto Exit;
+//	}
+
 
 Exit:
 	EXIT_FN
@@ -437,7 +439,7 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	//
 	// Loads the symbol table for the specified module.
 	//
-	Write(WriteLevel::Info , L"SymLoadModuleEx on hProcess=0x%x", hProcess);
+	Write(WriteLevel::Debug , L"SymLoadModuleEx on hProcess=0x%x", hProcess);
 	DWORD64 dwBase = SymLoadModuleEx(
 						hProcess,
 						de.u.CreateProcessInfo.hFile,
@@ -461,7 +463,7 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	}
 	else
 	{
-		Write(WriteLevel::Info , L"SymLoadModuleEx OK returned dwBase=0x%x", dwBase);
+		Write(WriteLevel::Debug , L"SymLoadModuleEx OK returned dwBase=0x%x", dwBase);
         dw64StartAddress = dwBase;
 	}
 
@@ -482,7 +484,7 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		goto Exit;
 	}
 
-	Write(WriteLevel::Debug, L"Crated process %s, symbols %sloaded ",
+	Write(WriteLevel::Info, L"Created process %s, symbols %sloaded ",
 			processName,
 			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"NOT ");
 
