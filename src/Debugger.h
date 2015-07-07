@@ -1,14 +1,13 @@
 
-void DebugStringEvent(const DEBUG_EVENT& de);
-void LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess);
-void CreateProcessDebugEvent(const DEBUG_EVENT& de);
-void GetProcessInfo(HANDLE hProcess);
-void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip);
-void Run();
 ULONG64 GetStartAddress(HANDLE hProcess, CHAR * funName);
-
-void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
-void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
-void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
+HRESULT DebugStringEvent(const DEBUG_EVENT& de);
+HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess);
+HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de);
+HRESULT GetProcessInfo(HANDLE hProcess);
+HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip);
+HRESULT Run();
+HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
+HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
+HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
 
 

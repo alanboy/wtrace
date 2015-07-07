@@ -12,6 +12,8 @@
 #include <string>
 #include <Dbghelp.h>
 
+#include <iostream>
+
 #include "output.h"
 #include "Utils.h"
 #include "Main.h"
@@ -22,12 +24,17 @@
 #define ENTER_FN \
 			dFunctionDepth++; \
 			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__)); \
-			dFunctionDepth++;
+			dFunctionDepth++; \
+			HRESULT hr = S_OK;
+
 
 #define EXIT_FN \
+			if (0,0) goto Exit; \
+			Exit: \
 			dFunctionDepth--; \
 			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__)); \
-			dFunctionDepth--;
+			dFunctionDepth--; \
+			return hr;
 
 
 int gAnalysisLevel;
@@ -41,6 +48,11 @@ std::string lastFunctionName;
 long lnFunctionCalls = 0;
 
 
+void Interactive()
+{
+	std::string cmd;
+	std::cin >> cmd;
+}
 
 #define STACKWALK_MAX_NAMELEN 1024
 typedef struct CallstackEntry
@@ -60,10 +72,12 @@ typedef struct CallstackEntry
 	CHAR loadedImageName[STACKWALK_MAX_NAMELEN];
 } CallstackEntry;
 
-void DumpContext(const CONTEXT& lcContext)
+HRESULT DumpContext(const CONTEXT& lcContext)
 {
+	ENTER_FN
+
 #ifdef _X86_
-	Write(WriteLevel::Info,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
+	Write(WriteLevel::Debug,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
 			L"RDX = %08X RSI = %08X RDI = %08X "
 			L"RSP = %08X RBP = %08X "
 			L"RFL = %08X",
@@ -74,7 +88,7 @@ void DumpContext(const CONTEXT& lcContext)
 			lcContext.EFlags
 		 );
 #else
-	Write(WriteLevel::Info,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
+	Write(WriteLevel::Debug,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
 			L"RDX = %08X RSI = %08X RDI = %08X "
 			L"RSP = %08X RBP = %08X "
 			L"RFL = %08X",
@@ -85,15 +99,16 @@ void DumpContext(const CONTEXT& lcContext)
 			lcContext.EFlags
 		 );
 #endif
+
+	EXIT_FN
 }
 
-void Run()
+HRESULT Run()
 {
 	ENTER_FN
 
 	DEBUG_EVENT de = {0};
 	int bCreateProcRes;
-	HRESULT hr;
 	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
 	bSyminitialized = FALSE;
@@ -112,143 +127,145 @@ void Run()
 
 	bCreateProcRes = CreateProcess(NULL, gpCommandLine, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
 
-	if (bCreateProcRes)
-	{
-		Write(WriteLevel::Debug, L"CreateProcess OK: "
-										L"(hProcess = 0x%08LX"
-										L" hThread = 0x%08LX"
-										L" dwProcessId = 0x%08LX)",
-										pi.hProcess,
-										pi.hThread,
-										pi.dwProcessId);
-		nSpawnedProcess++;
-
-		int bContinue = TRUE;
-		while (bContinue)
-		{
-			WaitForDebugEvent(&de, INFINITE);
-
-			Write(WriteLevel::Debug, L"EXCEPTION_DEBUG_EVENT "
-										L"(dwProcessId = 0x%08LX"
-										L" dwThreadId = 0x%08LX"
-										L" dwDebugEventCode = 0x%08LX)",
-										de.dwProcessId,
-										de.dwThreadId,
-										de.dwDebugEventCode);
-
-			switch (de.dwDebugEventCode)
-			{
-				case EXCEPTION_DEBUG_EVENT:
-
-					switch (de.u.Exception.ExceptionRecord.ExceptionCode)
-					{
-						case EXCEPTION_ACCESS_VIOLATION:
-						// First chance: Pass this on to the system. 
-						// Last chance: Display an appropriate error. 
-						Write(WriteLevel::Debug, L"EXCEPTION_ACCESS_VIOLATION");
-						break;
-
-						case EXCEPTION_BREAKPOINT:
-							ExceptionBreakpoint(pi.hThread, pi.hProcess);
-						break;
-
-						case EXCEPTION_DATATYPE_MISALIGNMENT: 
-						// First chance: Pass this on to the system. 
-						// Last chance: Display an appropriate error. 
-						Write(WriteLevel::Debug, L"EXCEPTION_DATATYPE_MISALIGNMENT");
-
-						break;
-
-						case EXCEPTION_SINGLE_STEP:
-							ExceptionSingleStep(pi.hProcess, pi.hThread);
-						break;
- 
-						case DBG_CONTROL_C:
-						// First chance: Pass this on to the system. 
-						// Last chance: Display an appropriate error. 
-						Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
-						break;
-
-						case 0xc000001d:
-						Write(WriteLevel::Debug, L"\tIllegal Instruction  An attempt was made to execute an illegal instruction.");
-						break;
-
-						default:
-						// Handle other exceptions. 
-						Write(WriteLevel::Debug, L"unknown debug event \t%d ? ", de.u.Exception.ExceptionRecord.ExceptionCode);
-						break;
-					} 
-
-					break;
-
-				default:
-					// Handle other exceptions. 
-					Write(WriteLevel::Debug, L"    nothing to do ? ");
-					break;
-
-				 case CREATE_THREAD_DEBUG_EVENT: 
-					// As needed, examine or change the thread's registers 
-					// with the GetThreadContext and SetThreadContext functions; 
-					// and suspend and resume thread execution with the 
-					// SuspendThread and ResumeThread functions. 
-					Write(WriteLevel::Debug, L"CREATE_THREAD_DEBUG_EVENT");
-					break;
-
-				 case CREATE_PROCESS_DEBUG_EVENT: 
-					CreateProcessDebugEvent(de);
-					break;
-		 
-				 case EXIT_THREAD_DEBUG_EVENT: 
-				 // Display the thread's exit code. 
-					Write(WriteLevel::Debug, L"EXIT_THREAD_DEBUG_EVENT");
-					break;
-		 
-				 case EXIT_PROCESS_DEBUG_EVENT: 
-				 // Display the process's exit code. 
-					nSpawnedProcess--;
-
-					if (nSpawnedProcess == 1)  bContinue = false;
-
-					Write(WriteLevel::Debug, L"EXIT_PROCESS_DEBUG_EVENT");
-					break;
-		 
-				 case LOAD_DLL_DEBUG_EVENT: 
-					LoadDllDebugEvent(de, pi.hProcess); // this is wrong for any process other than the 1 we started
-					break;
-		 
-				 case UNLOAD_DLL_DEBUG_EVENT: 
-				 // Display a message that the DLL has been unloaded. 
-					Write(WriteLevel::Debug, L"UNLOAD_DLL_DEBUG_EVENT");
-					break;
-		 
-				 case OUTPUT_DEBUG_STRING_EVENT: 
-					// Display the output debugging string. 
-					DebugStringEvent(de);
-
-					break;
-
-				 case RIP_EVENT:
-					Write(WriteLevel::Debug, L"RIP_EVENT");
-					break;
-			}
-
-			hr  = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
-
-			if(FAILED(hr))
-			{
-				Write(WriteLevel::Debug, L"Error.");
-				break;
-			}
-		}
-
-		CloseHandle(pi.hProcess);
-		CloseHandle(pi.hThread);
-
-	}
-	else
+	if (!bCreateProcRes)
 	{
 		Write(WriteLevel::Error, L"Unable to create process. hr=0x%x", GetLastError());
+		goto Exit;
 	}
+	Write(WriteLevel::Debug, L"CreateProcess OK: "
+									L"(hProcess = 0x%08LX"
+									L" hThread = 0x%08LX"
+									L" dwProcessId = 0x%08LX)",
+									pi.hProcess,
+									pi.hThread,
+									pi.dwProcessId);
+	nSpawnedProcess++;
+
+	int bContinue = TRUE;
+	while (bContinue)
+	{
+		WaitForDebugEvent(&de, INFINITE);
+
+		Write(WriteLevel::Debug, L"EXCEPTION_DEBUG_EVENT "
+									L"(dwProcessId = 0x%08LX"
+									L" dwThreadId = 0x%08LX"
+									L" dwDebugEventCode = 0x%08LX)",
+									de.dwProcessId,
+									de.dwThreadId,
+									de.dwDebugEventCode);
+
+		switch (de.dwDebugEventCode)
+		{
+			case EXCEPTION_DEBUG_EVENT:
+
+				switch (de.u.Exception.ExceptionRecord.ExceptionCode)
+				{
+					case EXCEPTION_ACCESS_VIOLATION:
+					// First chance: Pass this on to the system. 
+					// Last chance: Display an appropriate error. 
+					Write(WriteLevel::Debug, L"EXCEPTION_ACCESS_VIOLATION");
+					// This happens when amd64 debugs x86
+					break;
+
+					case EXCEPTION_BREAKPOINT:
+						ExceptionBreakpoint(pi.hThread, pi.hProcess);
+					break;
+
+					case EXCEPTION_DATATYPE_MISALIGNMENT: 
+					// First chance: Pass this on to the system. 
+					// Last chance: Display an appropriate error. 
+					Write(WriteLevel::Debug, L"EXCEPTION_DATATYPE_MISALIGNMENT");
+
+					break;
+
+					case EXCEPTION_SINGLE_STEP:
+						hr = ExceptionSingleStep(pi.hProcess, pi.hThread);
+						if (FAILED(hr))
+						{
+							goto Exit;
+						}
+					break;
+
+					case DBG_CONTROL_C:
+					// First chance: Pass this on to the system. 
+					// Last chance: Display an appropriate error. 
+					Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
+					break;
+
+					case 0xc000001d:
+					Write(WriteLevel::Debug, L"\tIllegal Instruction  An attempt was made to execute an illegal instruction.");
+					break;
+
+					default:
+					// Handle other exceptions. 
+					Write(WriteLevel::Debug, L"Unknown debug event : %x ? ", de.u.Exception.ExceptionRecord.ExceptionCode);
+					break;
+				}
+
+				break;
+
+			default:
+				// Handle other exceptions. 
+				Write(WriteLevel::Debug, L"    nothing to do ? ");
+				break;
+
+			 case CREATE_THREAD_DEBUG_EVENT: 
+				// As needed, examine or change the thread's registers 
+				// with the GetThreadContext and SetThreadContext functions; 
+				// and suspend and resume thread execution with the 
+				// SuspendThread and ResumeThread functions. 
+				Write(WriteLevel::Debug, L"CREATE_THREAD_DEBUG_EVENT");
+				break;
+
+			 case CREATE_PROCESS_DEBUG_EVENT: 
+				CreateProcessDebugEvent(de);
+				break;
+
+			 case EXIT_THREAD_DEBUG_EVENT: 
+			 // Display the thread's exit code. 
+				Write(WriteLevel::Debug, L"EXIT_THREAD_DEBUG_EVENT");
+				break;
+
+			 case EXIT_PROCESS_DEBUG_EVENT: 
+			 // Display the process's exit code. 
+				nSpawnedProcess--;
+
+				if (nSpawnedProcess == 1)  bContinue = false;
+
+				Write(WriteLevel::Debug, L"EXIT_PROCESS_DEBUG_EVENT");
+				break;
+
+			 case LOAD_DLL_DEBUG_EVENT: 
+				LoadDllDebugEvent(de, pi.hProcess); // this is wrong for any process other than the 1 we started
+				break;
+
+			 case UNLOAD_DLL_DEBUG_EVENT: 
+			 // Display a message that the DLL has been unloaded. 
+				Write(WriteLevel::Debug, L"UNLOAD_DLL_DEBUG_EVENT");
+				break;
+
+			 case OUTPUT_DEBUG_STRING_EVENT: 
+				// Display the output debugging string. 
+				DebugStringEvent(de);
+
+				break;
+
+			 case RIP_EVENT:
+				Write(WriteLevel::Debug, L"RIP_EVENT");
+				break;
+		}
+
+		hr  = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
+
+		if(FAILED(hr))
+		{
+			Write(WriteLevel::Error, L"Error.");
+			break;
+		}
+	}
+
+	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
 
 	DWORD TickDiff = GetTickCount() - StartTicks;
 
@@ -257,7 +274,7 @@ void Run()
 	EXIT_FN
 }
 
-void DebugStringEvent(const DEBUG_EVENT& de)
+HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 {
 	ENTER_FN
 
@@ -290,7 +307,7 @@ void DebugStringEvent(const DEBUG_EVENT& de)
 	EXIT_FN
 }
 
-void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
+HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
@@ -309,25 +326,29 @@ void ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 			goto Exit;
 		}
 
-		GetCurrentFunctionName(hThread, hProcess, lcContext);
-
-		lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-
-		bResult = SetThreadContext(hThread, &lcContext);
-		if (!bResult)
+		hr = GetCurrentFunctionName(hThread, hProcess, lcContext);
+		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
+		if (FAILED(hr))
 		{
-			Write(WriteLevel::Error, L"SetThreadContext failed 0x%x", GetLastError());
 			goto Exit;
 		}
 
+		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
 
+		lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+
+		if (0 == SetThreadContext(hThread, &lcContext))
+		{
+			hr = GetLastError();
+			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
+			goto Exit;
+		}
 	}
 
-Exit:
 	EXIT_FN
 }
 
-void LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
+HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 {
 	ENTER_FN
 
@@ -377,12 +398,10 @@ void LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 //		goto Exit;
 //	}
 
-
-Exit:
 	EXIT_FN
 }
 
-void CreateProcessDebugEvent(const DEBUG_EVENT& de)
+HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 {
 	ENTER_FN
 
@@ -520,12 +539,11 @@ void CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
-Exit:
 	EXIT_FN
 }
 
 
-void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
+HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 {
 	ENTER_FN
 
@@ -539,7 +557,6 @@ void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	}
 	else
 	{
-
 		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
 		Write(WriteLevel::Debug, L"Start address=%x", g_dwStartAddress);
 
@@ -559,40 +576,51 @@ void ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		// This does not work when you have a physical DebugBreak() in the code
 		Write(WriteLevel::Debug, L"Instruction pointer minus 1");
 
-#ifdef _X86_
-		lcContext.Eip--;
-#else
-		lcContext.Rip--;
-#endif
-
-		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-		lcContext.EFlags |= 0x100;
-
-		SetThreadContext(hThread, &lcContext);
+		Interactive();
 
 		if (m_OriginalInstruction != 0)
 		{
+#ifdef _X86_
+			lcContext.Eip--;
+#else
+			lcContext.Rip--;
+#endif
+
 			Write(WriteLevel::Debug, L"Writing back original instruction ");
+
 			SIZE_T lNumberOfBytesRead ;
 			WriteProcessMemory(hProcess, g_dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
 			FlushInstructionCache(hProcess, g_dwStartAddress, 1);
 			m_OriginalInstruction = 0;
 		}
+
+		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+		lcContext.EFlags |= 0x100;
+
+		//A 64-bit application can set the context of a WOW64 thread using the Wow64SetThreadContext function.
+		if (0 == SetThreadContext(hThread, &lcContext))
+		{
+			hr = GetLastError();
+			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
+			goto Exit;
+		}
 	}
 
-Exit:
 	EXIT_FN
 }
 
-void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context)
+HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context)
 {
 	ENTER_FN
 
 	std::string sFuntionName;
-
 	DWORD64 instructionPointer;
 
-	RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
+	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
+	if (FAILED(hr))
+	{
+		goto Exit;
+	}
 
 	if (sFuntionName.compare(lastFunctionName) == 0)
 	{
@@ -603,22 +631,28 @@ void GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& cont
 		lnFunctionCalls++;
 
 #ifdef _X86_
-		printf("0x%x ", (DWORD)instructionPointer);
+		printf("0x%010x ", (DWORD)instructionPointer);
+		//instruction pointer minus 1 is the reaal deal
+		//unsigned char *p = (unsigned char *)&instructionPointer;
+		//printf(" %x ", *(p-1));
+		//printf("%x ", p[1]);
+		//printf("%x ", p[1]);
 #else
-		printf("0x%x ", instructionPointer);
+		printf("0x%010x ", instructionPointer);
+		//printf("%5x ", *instructionPointer);
 #endif
 
-		printf("%d ", lnFunctionCalls);
-		printf("%s\n", sFuntionName.c_str());
+		printf("0x%03x ", hThread);
+		printf("%4d ", lnFunctionCalls);
+		printf("%s()\n", sFuntionName.c_str());
 
 		lastFunctionName = sFuntionName;
 	}
 
-Exit:
 	EXIT_FN
 }
 
-void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
+HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
 {
 	ENTER_FN
 
@@ -680,7 +714,11 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, 
 		// context might be modified.
 		//
 		BOOL bResult = StackWalk64(
-				IMAGE_FILE_MACHINE_AMD64, // IMAGE_FILE_MACHINE_I386,
+#ifdef _X86_
+				IMAGE_FILE_MACHINE_I386,
+#else
+				IMAGE_FILE_MACHINE_AMD64,
+#endif
 				hProcess,
 				hThread,
 				&stack,
@@ -711,7 +749,6 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, 
 		if (stack.AddrPC.Offset != 0)
 		{
 			// we seem to have a valid PC
-			// show procedure info (SymGetSymFromAddr64())
 			if (SymGetSymFromAddr64(hProcess,
 										stack.AddrPC.Offset,
 										&(csEntry.offsetFromSmybol),
@@ -729,15 +766,17 @@ void RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, 
 			}
 			else
 			{
+				hr = GetLastError();
 				Write(WriteLevel::Error,
 							L"SymGetSymFromAddr64 failed 0x%x, s.AddrPC.Offset=0x%x",
-							GetLastError(),
+							hr,
 							stack.AddrPC.Offset);
+				goto Exit;
 			}
 		}
 	}
 
-Exit:
+	// leaking on failure
 	delete pSym;
 
 	EXIT_FN

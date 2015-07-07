@@ -29,7 +29,7 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 {
 	const WORD colors[] =
 	{
-		0x1A, 0x2B, 0x3C, 0x4D, 0x5E, 0x6F,
+		0x0C/* red on black */, 0x2B, 0x3C, 0x4D, 0x5E, 0x6F,
 		0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6
 	};
 
@@ -49,8 +49,7 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 
 			if (level == WriteLevel::Error)
 			{
-				//SetConsoleTextAttribute( hstdout, 0xEC );
-				SetConsoleTextAttribute( hstdout, colors[ 2 ] );
+				SetConsoleTextAttribute( hstdout, colors[ 0 ] );
 				printf(" + ");
 			}
 			else
