@@ -23,8 +23,6 @@ WriteLevel gWriteLevelThreshold = WriteLevel::Output;
 FILE * gFp;
 int dFunctionDepth = 0;
 
-
-
 void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 {
 	const WORD colors[] =
@@ -51,6 +49,12 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 			{
 				SetConsoleTextAttribute( hstdout, colors[ 0 ] );
 				printf(" + ");
+			}
+			else if ((level == WriteLevel::Info) && (gWriteLevelThreshold == WriteLevel::Debug))
+			{
+				// color info messages when debug is turned on
+				SetConsoleTextAttribute( hstdout, colors[ 1 ] );
+				printf(">> ");
 			}
 			else
 			{
@@ -83,3 +87,4 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 
 	va_end (lineArgs);
 }
+

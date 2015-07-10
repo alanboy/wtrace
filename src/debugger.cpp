@@ -40,7 +40,6 @@
 int gAnalysisLevel;
 BYTE m_OriginalInstruction;
 DWORD processNameLen;
-LPVOID g_dwStartAddress;
 int nSpawnedProcess;
 bool bSyminitialized;
 bool firstDebugEvent = 1;
@@ -50,10 +49,12 @@ long lnFunctionCalls = 0;
 
 void Interactive()
 {
-	std::string cmd;
-	std::cin >> cmd;
+	//std::cout << "input>";
+	//std::string cmd;
+	//std::cin >> cmd;
 }
 
+//#define UILD_WOW64_ENABLED 1 //?
 #define STACKWALK_MAX_NAMELEN 1024
 typedef struct CallstackEntry
 {
@@ -77,16 +78,18 @@ HRESULT DumpContext(const CONTEXT& lcContext)
 	ENTER_FN
 
 #ifdef _X86_
-	Write(WriteLevel::Debug,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
-			L"RDX = %08X RSI = %08X RDI = %08X "
-			L"RSP = %08X RBP = %08X "
-			L"RFL = %08X",
-			lcContext.Eip,
+	Write(WriteLevel::Debug,  L"eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X",
 			lcContext.Eax, lcContext.Ebx, lcContext.Ecx,
-			lcContext.Edx, lcContext.Esi, lcContext.Edi,
-			lcContext.Esp, lcContext.Ebp,
-			lcContext.EFlags
-		 );
+			lcContext.Edx, lcContext.Esi, lcContext.Edi);
+
+	Write(WriteLevel::Debug,  L"eip=%08X esp=%08X ebp=%08X",
+			lcContext.Eip, lcContext.Esp, lcContext.Ebp);
+
+	Write(WriteLevel::Debug, L"eflags = %08X",
+			lcContext.EFlags);
+
+	//Write(WriteLevel::Debug,  L"cs=0023  ss=002b  ds=002b  es=002b  fs=0053  gs=002b             efl=00000202", );
+
 #else
 	Write(WriteLevel::Debug,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
 			L"RDX = %08X RSI = %08X RDI = %08X "
@@ -112,7 +115,6 @@ HRESULT Run()
 	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
 	bSyminitialized = FALSE;
-	g_dwStartAddress = 0;
 
 	// Ref count of processes created
 	nSpawnedProcess = 0;
@@ -149,10 +151,12 @@ HRESULT Run()
 		Write(WriteLevel::Debug, L"EXCEPTION_DEBUG_EVENT "
 									L"(dwProcessId = 0x%08LX"
 									L" dwThreadId = 0x%08LX"
-									L" dwDebugEventCode = 0x%08LX)",
+									L" dwDebugEventCode = 0x%08LX %s %x)",
 									de.dwProcessId,
 									de.dwThreadId,
-									de.dwDebugEventCode);
+									de.dwDebugEventCode,
+									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? L"ExceptionCode = 0x" : L"",
+									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? de.u.Exception.ExceptionRecord.ExceptionCode : 0);
 
 		switch (de.dwDebugEventCode)
 		{
@@ -255,7 +259,7 @@ HRESULT Run()
 				break;
 		}
 
-		hr  = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
+		hr = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
 
 		if(FAILED(hr))
 		{
@@ -269,7 +273,7 @@ HRESULT Run()
 
 	DWORD TickDiff = GetTickCount() - StartTicks;
 
-	Write(WriteLevel::Output, L"Finished after %d seconds ", TickDiff/1000 );
+	Write(WriteLevel::Info, L"Finished after %d seconds ", TickDiff/1000 );
 
 	EXIT_FN
 }
@@ -294,11 +298,11 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 
 	if (DebugString.fUnicode)
 	{
-		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: %s", msg);
+		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT: %s", msg);
 	}
 	else
 	{
-		Write(WriteLevel::Output, L"OUTPUT_DEBUG_STRING_EVENT: ");
+		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT: ");
 	
 	}
 
@@ -307,14 +311,62 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 	EXIT_FN
 }
 
-HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
+HRESULT ExceptionSingleStepWow64(HANDLE hProcess, HANDLE hThread)
+{
+	ENTER_FN
+
+	WOW64_CONTEXT lcWowContext = {0};
+	BOOL bResult = FALSE;
+
+	if (gAnalysisLevel >= 3)
+	{
+		lcWowContext.ContextFlags = CONTEXT_ALL;
+
+		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
+		if (!bResult)
+		{
+			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", GetLastError());
+			goto Exit;
+		}
+
+		DumpContext(*((CONTEXT*)&lcWowContext));
+
+		hr = GetCurrentFunctionName(hThread, hProcess, *((CONTEXT*)&lcWowContext));
+		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
+		if (FAILED(hr))
+		{
+			goto Exit;
+		}
+
+		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+
+		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+		if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
+		{
+			hr = GetLastError();
+			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
+			goto Exit;
+		}
+
+//		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
+//		if (!bResult)
+//		{
+//			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", GetLastError());
+//			goto Exit;
+//		}
+//		DumpContext(*((CONTEXT*)&lcWowContext));
+	}
+
+	EXIT_FN
+
+}
+
+HRESULT ExceptionSingleStepX64(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
 	CONTEXT lcContext = {0};
 
-	// First chance: Update the display of the 
-	// current instruction and register values. 
 	if (gAnalysisLevel >= 3)
 	{
 		lcContext.ContextFlags = CONTEXT_ALL;
@@ -325,6 +377,8 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
 			goto Exit;
 		}
+
+		DumpContext(lcContext);
 
 		hr = GetCurrentFunctionName(hThread, hProcess, lcContext);
 		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
@@ -343,6 +397,47 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
 			goto Exit;
 		}
+
+	}
+
+	EXIT_FN
+}
+
+HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
+{
+	ENTER_FN
+
+	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
+	LPFN_ISWOW64PROCESS fnIsWow64Process;
+	BOOL bIsWow64 = FALSE;
+
+	//IsWow64Process is not available on all supported versions of Windows.
+	//Use GetModuleHandle to get a handle to the DLL that contains the function
+	//and GetProcAddress to get a pointer to the function if available.
+	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
+			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
+
+	if(NULL != fnIsWow64Process)
+	{
+		if (!fnIsWow64Process(hProcess, &bIsWow64))
+		{
+			hr = GetLastError();
+			goto Exit;
+		}
+	}
+
+
+	Write(WriteLevel::Debug, L"hProcess=0x%d is %s wow64 process",
+			hProcess,
+			bIsWow64 ? L"" : L"NOT");
+
+	if (bIsWow64)
+	{
+		ExceptionSingleStepWow64(hProcess, hThread);
+	}
+	else
+	{
+		ExceptionSingleStepX64(hProcess, hThread);
 	}
 
 	EXIT_FN
@@ -408,24 +503,32 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	LPCREATE_PROCESS_DEBUG_INFO pCreateProcessDebugInfo = (LPCREATE_PROCESS_DEBUG_INFO)&de.u.CreateProcessInfo;
 
 	BYTE cInstruction;
-	DWORD64 dw64StartAddress = 0;
 	HANDLE hProcess = de.u.CreateProcessInfo.hProcess;
 	IMAGEHLP_MODULE64 module_info;
 	SIZE_T lpNumberOfBytesRead;
 	LPWSTR processName = new WCHAR[MAX_PATH];
 
-	Write(WriteLevel::Debug, L"LPCREATE_PROCESS_DEBUG_INFO = {"
-			L"hFile = 0x%08LX"
-			L" hProcess = 0x%08LX"
-			L" hThread = 0x%08LX"
-			L" lpBaseOfImage = 0x%08LX }",
+	DWORD64 dw64StartAddress = 0;
+	DWORD dwStartAddress = 0;
+
+	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
+			L"hFile= 0x%08LX"
+			L" hProcess= 0x%08LX"
+			L" hThread= 0x%08LX"
+			L" lpBaseOfImage= 0x%08LX }",
 			pCreateProcessDebugInfo->hFile,
 			pCreateProcessDebugInfo->hProcess,
 			pCreateProcessDebugInfo->hThread,
 			pCreateProcessDebugInfo->lpBaseOfImage);
 
-	g_dwStartAddress = (LPVOID)de.u.CreateProcessInfo.lpStartAddress;
+#ifdef _X86_
+	Write(WriteLevel::Debug, L"lpStartAddress=0x%08x", (DWORD)de.u.CreateProcessInfo.lpStartAddress);
+#else
+	Write(WriteLevel::Debug, L"lpStartAddress=0x%016x", (DWORD64)de.u.CreateProcessInfo.lpStartAddress);
+#endif
+
 	dw64StartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
+	dwStartAddress = (DWORD)de.u.CreateProcessInfo.lpStartAddress;
 
 	nSpawnedProcess++;
 
@@ -483,7 +586,8 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	else
 	{
 		Write(WriteLevel::Debug , L"SymLoadModuleEx OK returned dwBase=0x%x", dwBase);
-        dw64StartAddress = dwBase;
+		// why are we doing this ?
+		//dw64StartAddress = dwBase;
 	}
 
 	module_info.SizeOfStruct = sizeof(module_info);
@@ -491,10 +595,10 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	//
 	// Retrieves the module information of the specified module.
 	//
-	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, dwStartAddress=0x%x", hProcess, dw64StartAddress);
+	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, dwStartAddress=0x%x", hProcess, dwBase);
 	BOOL bSuccess = SymGetModuleInfo64(
 			hProcess,
-			dw64StartAddress,
+			dwBase,
 			&module_info);
 
 	if (!bSuccess)
@@ -503,8 +607,22 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		goto Exit;
 	}
 
-	Write(WriteLevel::Info, L"Created process %s, symbols %sloaded ",
+
+	if (de.u.CreateProcessInfo.lpImageName)
+	{
+		if (de.u.CreateProcessInfo.fUnicode)
+		{
+			Write(WriteLevel::Debug, L"Image name is %s ", (de.u.CreateProcessInfo.lpImageName));
+		}
+		else
+		{
+			Write(WriteLevel::Debug, L"Image name is present but not in unicode.");
+		}
+	}
+
+	Write(WriteLevel::Info, L"CreateProcessDebugEvent process %s at 0x%x, symbols %sloaded",
 			processName,
+			de.u.CreateProcessInfo.lpStartAddress,
 			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"NOT ");
 
 	//
@@ -516,39 +634,61 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		// Read the first instruction and save it
 		int result = ReadProcessMemory(
 						hProcess,
-						(void*)g_dwStartAddress,
+#ifdef _X86_
+						(void*)dwStartAddress,
+#else
+						(void*)dw64StartAddress,
+#endif
 						&cInstruction,
 						1,
 						&lpNumberOfBytesRead);
 
 		if (result == 0)
 		{
-			Write(WriteLevel::Debug, L"ReadProcessMemory failed %x", GetLastError());
+			hr = GetLastError();
+			Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
 			goto Exit;
 		}
 
 		if (cInstruction != 0xCC)
 		{
-			Write(WriteLevel::Debug, L"Replacing first instruction '%x' with 0xCC", cInstruction);
+			Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, dwStartAddress);
+
 			m_OriginalInstruction = cInstruction;
 
 			// Replace it with Breakpoint
 			cInstruction = 0xCC;
-			WriteProcessMemory(hProcess, (void*)g_dwStartAddress,&cInstruction, 1, &lpNumberOfBytesRead);
-			FlushInstructionCache(hProcess, (void*)g_dwStartAddress, 1);
+
+			WriteProcessMemory(hProcess, (void*)dwStartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
+
+			FlushInstructionCache(hProcess, (void*)dwStartAddress, 1);
 		}
 	}
 
 	EXIT_FN
 }
 
-
 HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 {
 	ENTER_FN
 
 	CONTEXT lcContext;
+	DWORD dwStartAddress;
+	DWORD64 dw64StartAddress;
+	lcContext.ContextFlags = CONTEXT_ALL;
 
+	Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
+
+	BOOL bResult = GetThreadContext(hThread, &lcContext);
+	if (!bResult)
+	{
+		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
+		goto Exit;
+	}
+
+	DumpContext(lcContext);
+
+#ifdef _X86_
 	if (firstDebugEvent)
 	{
 		// First chance: Display the current instruction and register values.
@@ -556,41 +696,33 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		firstDebugEvent = 0;
 	}
 	else
+#endif
 	{
-		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
-		Write(WriteLevel::Debug, L"Start address=%x", g_dwStartAddress);
-
-		lcContext.ContextFlags = CONTEXT_ALL;
-
-		BOOL bResult = GetThreadContext(hThread, &lcContext);
-		if (!bResult)
-		{
-			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
-			goto Exit;
-		}
-
-		DumpContext(lcContext);
-
 		GetCurrentFunctionName(hThread, hProcess, lcContext);
 
 		// This does not work when you have a physical DebugBreak() in the code
-		Write(WriteLevel::Debug, L"Instruction pointer minus 1");
+		//Write(WriteLevel::Debug, L"Instruction pointer minus 1");
 
 		Interactive();
 
 		if (m_OriginalInstruction != 0)
 		{
-#ifdef _X86_
-			lcContext.Eip--;
-#else
-			lcContext.Rip--;
-#endif
-
 			Write(WriteLevel::Debug, L"Writing back original instruction ");
 
-			SIZE_T lNumberOfBytesRead ;
-			WriteProcessMemory(hProcess, g_dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
-			FlushInstructionCache(hProcess, g_dwStartAddress, 1);
+			SIZE_T lNumberOfBytesRead;
+
+#ifdef _X86_
+			lcContext.Eip--;
+			dwStartAddress = lcContext.Eip;
+			WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+			FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
+#else
+			lcContext.Rip--;
+			dw64StartAddress = lcContext.Rip;
+			WriteProcessMemory(hProcess, (LPVOID)dw64StartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+			FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
+#endif
+
 			m_OriginalInstruction = 0;
 		}
 
@@ -614,6 +746,7 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	ENTER_FN
 
 	std::string sFuntionName;
+	std::wstring wsFuctionName;
 	DWORD64 instructionPointer;
 
 	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
@@ -622,32 +755,48 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 		goto Exit;
 	}
 
-	if (sFuntionName.compare(lastFunctionName) == 0)
+	if (gAnalysisLevel >= 4)
 	{
-		goto Exit;
-	}
-	else
-	{
-		lnFunctionCalls++;
-
-#ifdef _X86_
-		printf("0x%010x ", (DWORD)instructionPointer);
-		//instruction pointer minus 1 is the reaal deal
-		//unsigned char *p = (unsigned char *)&instructionPointer;
-		//printf(" %x ", *(p-1));
-		//printf("%x ", p[1]);
-		//printf("%x ", p[1]);
-#else
-		printf("0x%010x ", instructionPointer);
-		//printf("%5x ", *instructionPointer);
-#endif
-
-		printf("0x%03x ", hThread);
-		printf("%4d ", lnFunctionCalls);
-		printf("%s()\n", sFuntionName.c_str());
-
 		lastFunctionName = sFuntionName;
 	}
+	else // gAnalysisLevel == 3
+	{
+		if (sFuntionName.compare(lastFunctionName) == 0)
+		{
+			goto Exit;
+		}
+		else
+		{
+			lastFunctionName = sFuntionName;
+		}
+	}
+
+	lnFunctionCalls++;
+
+#if 0
+#ifdef _X86_
+	//instructionPointer -= 1; //instruction pointer minus 1 is the reaal deal; but why ?
+	printf("%p ", (DWORD)instructionPointer);
+
+	if ((DWORD)instructionPointer != 0xFFFFFFFF)
+	{
+		int* pcontent = (int*)instructionPointer;
+		int content = *pcontent;
+
+		printf(" %2x ", content);
+	}
+
+#else
+	printf("0x%016x ", instructionPointer);
+	//printf("%5x ", *instructionPointer);
+#endif
+#endif
+
+
+	wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
+
+	//Write(WriteLevel::Info, L"0x%x 0x%03x %4d %s", instructionPointer, hThread, lnFunctionCalls, wsFuctionName.c_str());
+	Write(WriteLevel::Info, L"0x%03x %4d %s", hThread, lnFunctionCalls, wsFuctionName.c_str());
 
 	EXIT_FN
 }
@@ -762,6 +911,10 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 				{
 					// Copy into caller
 					*sFuntionName = pSym->Name;
+				}
+				else
+				{
+					Write(WriteLevel::Error, L"SymGetSymFromAddr64 returned null function name ");
 				}
 			}
 			else
