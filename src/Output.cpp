@@ -23,6 +23,13 @@ WriteLevel gWriteLevelThreshold = WriteLevel::Output;
 FILE * gFp;
 int dFunctionDepth = 0;
 
+void Interactive()
+{
+	std::cout << "input>";
+	std::string cmd;
+	std::cin >> cmd;
+}
+
 void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 {
 	const WORD colors[] =
@@ -67,17 +74,18 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 				printf("\t");
 			}
 
-			if (level == WriteLevel::Error)
-			{
-				printf("[Error] ");
-			}
-
 			vwprintf(lineFormat, lineArgs);
 			printf("\n");
 
 			FlushConsoleInputBuffer( hstdin );
 
 			SetConsoleTextAttribute( hstdout, csbi.wAttributes );
+
+
+			if (level == WriteLevel::Error)
+			{
+				//Interactive();
+			}
 		}
 		else
 		{

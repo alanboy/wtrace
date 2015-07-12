@@ -119,7 +119,9 @@ int wmain(int argc, wchar_t ** argv)
 		goto Exit;
 	}
 
-	Run();
+	HRESULT hr = Run();
+
+	printf("finished. overall result=0x%08x", hr);
 
 Exit:
 	if (gFp)

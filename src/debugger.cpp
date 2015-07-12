@@ -36,6 +36,7 @@
 			dFunctionDepth--; \
 			return hr;
 
+#define BREAK_IF_DEBUGGER_PRESENT() if (IsDebuggerPresent()) DebugBreak();
 
 int gAnalysisLevel;
 BYTE m_OriginalInstruction;
@@ -47,12 +48,6 @@ std::string lastFunctionName;
 long lnFunctionCalls = 0;
 
 
-void Interactive()
-{
-	//std::cout << "input>";
-	//std::string cmd;
-	//std::cin >> cmd;
-}
 
 //#define UILD_WOW64_ENABLED 1 //?
 #define STACKWALK_MAX_NAMELEN 1024
@@ -131,7 +126,8 @@ HRESULT Run()
 
 	if (!bCreateProcRes)
 	{
-		Write(WriteLevel::Error, L"Unable to create process. hr=0x%x", GetLastError());
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"Unable to create process. hr=0x%x", hr);
 		goto Exit;
 	}
 	Write(WriteLevel::Debug, L"CreateProcess OK: "
@@ -325,16 +321,18 @@ HRESULT ExceptionSingleStepWow64(HANDLE hProcess, HANDLE hThread)
 		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
 		if (!bResult)
 		{
-			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", GetLastError());
+			hr =  HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
 			goto Exit;
 		}
 
-		DumpContext(*((CONTEXT*)&lcWowContext));
+		hr = DumpContext(*((CONTEXT*)&lcWowContext));
 
 		hr = GetCurrentFunctionName(hThread, hProcess, *((CONTEXT*)&lcWowContext));
 		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
 		if (FAILED(hr))
 		{
+			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
 			goto Exit;
 		}
 
@@ -343,7 +341,7 @@ HRESULT ExceptionSingleStepWow64(HANDLE hProcess, HANDLE hThread)
 		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
 		if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
 		{
-			hr = GetLastError();
+			hr =  HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
 			goto Exit;
 		}
@@ -374,7 +372,8 @@ HRESULT ExceptionSingleStepX64(HANDLE hProcess, HANDLE hThread)
 		BOOL bResult = GetThreadContext(hThread, &lcContext);
 		if (!bResult)
 		{
-			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
+			hr =  HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
 			goto Exit;
 		}
 
@@ -393,7 +392,7 @@ HRESULT ExceptionSingleStepX64(HANDLE hProcess, HANDLE hThread)
 
 		if (0 == SetThreadContext(hThread, &lcContext))
 		{
-			hr = GetLastError();
+			hr =  HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
 			goto Exit;
 		}
@@ -421,7 +420,7 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 	{
 		if (!fnIsWow64Process(hProcess, &bIsWow64))
 		{
-			hr = GetLastError();
+			hr =  HRESULT_FROM_WIN32(GetLastError());
 			goto Exit;
 		}
 	}
@@ -433,11 +432,11 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 
 	if (bIsWow64)
 	{
-		ExceptionSingleStepWow64(hProcess, hThread);
+		hr = ExceptionSingleStepWow64(hProcess, hThread);
 	}
 	else
 	{
-		ExceptionSingleStepX64(hProcess, hThread);
+		hr= ExceptionSingleStepX64(hProcess, hThread);
 	}
 
 	EXIT_FN
@@ -539,7 +538,8 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 						0);
 	if (processNameLen == 0)
 	{
-		Write(WriteLevel::Error, L"GetFinalPathNameByHandleW failed: %x", GetLastError());
+			hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"GetFinalPathNameByHandleW failed: %x", hr);
 		goto Exit;
 	}
 
@@ -553,6 +553,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		DWORD error = GetLastError();
 		if (error != ERROR_SUCCESS)
 		{
+			hr = HRESULT_FROM_WIN32(error);
 			Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
 			goto Exit;
 		}
@@ -577,6 +578,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		DWORD error = GetLastError();
 		if (error != ERROR_SUCCESS)
 		{
+			hr = HRESULT_FROM_WIN32(error);
 			Write(WriteLevel::Error, L"SymLoadModuleEx failed 0x%x", error);
 			goto Exit;
 		}
@@ -603,7 +605,8 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 	if (!bSuccess)
 	{
-		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x", GetLastError());
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x", hr);
 		goto Exit;
 	}
 
@@ -645,7 +648,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 		if (result == 0)
 		{
-			hr = GetLastError();
+			hr = HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
 			goto Exit;
 		}
@@ -682,7 +685,8 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	BOOL bResult = GetThreadContext(hThread, &lcContext);
 	if (!bResult)
 	{
-		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", GetLastError());
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
 		goto Exit;
 	}
 
@@ -703,7 +707,6 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		// This does not work when you have a physical DebugBreak() in the code
 		//Write(WriteLevel::Debug, L"Instruction pointer minus 1");
 
-		Interactive();
 
 		if (m_OriginalInstruction != 0)
 		{
@@ -732,7 +735,7 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		//A 64-bit application can set the context of a WOW64 thread using the Wow64SetThreadContext function.
 		if (0 == SetThreadContext(hThread, &lcContext))
 		{
-			hr = GetLastError();
+			hr = HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
 			goto Exit;
 		}
@@ -752,6 +755,7 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
 	if (FAILED(hr))
 	{
+		Write(WriteLevel::Error, L"RetrieveCallstack failed with 0x%x.", hr);
 		goto Exit;
 	}
 
@@ -848,6 +852,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			DWORD error = GetLastError();
 			if (error != ERROR_SUCCESS)
 			{
+				hr = HRESULT_FROM_WIN32(error);
 				Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
 				goto Exit;
 			}
@@ -880,7 +885,8 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		if (FALSE == bResult)
 		{
 			// INFO: "StackWalk64" does not set "GetLastError"...
-			Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", GetLastError());
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", hr);
 			goto Exit;
 		}
 
@@ -919,11 +925,14 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			}
 			else
 			{
-				hr = GetLastError();
+				hr = HRESULT_FROM_WIN32(GetLastError());
 				Write(WriteLevel::Error,
 							L"SymGetSymFromAddr64 failed 0x%x, s.AddrPC.Offset=0x%x",
 							hr,
 							stack.AddrPC.Offset);
+
+				BREAK_IF_DEBUGGER_PRESENT();
+
 				goto Exit;
 			}
 		}
