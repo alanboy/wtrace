@@ -214,7 +214,7 @@ HRESULT Run()
 				// with the GetThreadContext and SetThreadContext functions; 
 				// and suspend and resume thread execution with the 
 				// SuspendThread and ResumeThread functions. 
-				Write(WriteLevel::Debug, L"CREATE_THREAD_DEBUG_EVENT");
+				Write(WriteLevel::Info, L"CREATE_THREAD_DEBUG_EVENT");
 				break;
 
 			 case CREATE_PROCESS_DEBUG_EVENT: 
@@ -278,19 +278,45 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 {
 	ENTER_FN
 
-	HANDLE hProcess = NULL;// THis will not work!
-
 	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
 
-	WCHAR *msg = new WCHAR[DebugString.nDebugStringLength];
+	CHAR *msg = new CHAR[DebugString.nDebugStringLength];
+
+	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, TRUE, de.dwProcessId);
+	if (hProcess == NULL)
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"OpenProcess failed 0x%x", hr);
+		goto Exit;
+	}
+
 	//// Don't care if string is ANSI, and we allocate double...
 
-	ReadProcessMemory(
-			hProcess,					// HANDLE to Debuggee
+	int result = ReadProcessMemory(
+			hProcess,
 			DebugString.lpDebugStringData,	// Target process' valid pointer
 			msg,							// Copy to this address space
 			DebugString.nDebugStringLength,
 			NULL);
+
+	if (result == 0)
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+
+		Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
+
+		hr = S_OK;
+		goto Exit;
+	}
+
+	if (msg)
+	{
+		if (msg[0] == 0xd && msg[1] == 0xa)
+		{
+			// <CR><LF> - Carriage regurn & New line, if we dont do this, Acces Violation when trying to print this 
+			goto Release;
+		}
+	}
 
 	if (DebugString.fUnicode)
 	{
@@ -298,11 +324,21 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 	}
 	else
 	{
-		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT: ");
-	
+		std::string sOutput(msg);
+		std::wstring wsOuput;
+		wsOuput.assign(sOutput.begin(), sOutput.end());
+		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT: %s ", wsOuput);
 	}
 
+Release:
+	// Leaked on exit
 	delete [] msg;
+
+	if (hProcess)
+	{
+		CloseHandle(hProcess);
+		hProcess = NULL;
+	}
 
 	EXIT_FN
 }
@@ -446,32 +482,82 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 {
 	ENTER_FN
 
+	// LOAD_DLL_DEBUG_INFO structure
+	// https://msdn.microsoft.com/en-us/library/windows/desktop/ms680351(v=vs.85).aspx
+
 	// Read the debugging information included in the newly loaded DLL.
 	WCHAR pszFilename[MAX_PATH+1];
 	DWORD64 dwBase;
 
-	GetFileNameFromHandle(de.u.LoadDll.hFile, (WCHAR *)&pszFilename);
+	BOOL bSuccess = GetFileNameFromHandle(de.u.LoadDll.hFile, (WCHAR *)&pszFilename);
 
-//	IMAGEHLP_MODULE64 module_info;
-//	BOOL bSuccess;
-
-	//BOOL bRes = SymInitialize(hProcess, NULL, FALSE);
-
-	Write(WriteLevel::Debug, L"SymLoadModuleEx on hProcess 0x%x", hProcess);
+	Write(WriteLevel::Debug, L"SymLoadModuleEx on hProcess0x%x", hProcess);
+// For upcoming LOAD_DLL_DEBUG_EVENTs, we also need to call this function for the respective DLL being loaded.
 	dwBase = SymLoadModuleEx(
-			hProcess,//_In_  HANDLE hProcess,
-			de.u.LoadDll.hFile,//_In_  HANDLE hFile,
+			hProcess,
+			de.u.LoadDll.hFile,
 			NULL,//_In_  PCTSTR ImageName,
 			NULL,//_In_  PCTSTR ModuleName,
-			0, //(DWORD64)de.u.LoadDll.lpBaseOfDll,//_In_  DWORD64 BaseOfDll,
+			(DWORD64)de.u.LoadDll.lpBaseOfDll,//_In_  DWORD64 BaseOfDll,
 			0,//_In_  DWORD DllSize,
 			NULL,//_In_  PMODLOAD_DATA Data,
 			0);//_In_  DWORD Flags
 
-	Write(WriteLevel::Info, L"Loaded %s at %x, symbols %s loaded",
-			pszFilename,
+	if (dwBase == 0)
+	{
+//If the function succeeds, the return value is the base address of the loaded module.
+//If the function fails, the return value is zero. To retrieve extended error information, call GetLastError.
+//If the module is already loaded, the return value is zero and GetLastError returns ERROR_SUCCESS.
+		Write(WriteLevel::Debug, L"SymLoadModuleEx returnd 0x%x", dwBase);
+	}
+
+	// lpImageName -A pointer to the file name associated with hFile. This member may 
+	// be NULL, or it may contain the address of a string pointer in the address space
+	// of the process being debugged. That address may, in turn, either be NULL or point
+	// to the actual filename. If fUnicode is a nonzero value, the name string is
+	// Unicode; otherwise, it is ANSI.
+	if (de.u.LoadDll.lpImageName)
+	{
+		BYTE cInstruction[100];
+		SIZE_T lpNumberOfBytesRead;
+
+		int result = ReadProcessMemory(
+				hProcess,
+#ifdef _X86_
+				(void*)de.u.LoadDll.lpImageName,
+#else
+				(void*)de.u.LoadDll.lpImageName,
+#endif
+				&cInstruction,
+				100,
+				&lpNumberOfBytesRead);
+
+		if (result == 0)
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+
+			if (hr != HRESULT_FROM_WIN32(ERROR_PARTIAL_COPY))
+			{
+				Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
+				goto Exit;
+			}
+
+			hr = S_OK;
+		}
+
+		//Write(WriteLevel::Info, L"ReadProcessMemory read 0x%x bytes %s ", lpNumberOfBytesRead, cInstruction);
+	}
+
+	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
 			de.u.LoadDll.lpBaseOfDll,
-			 L" NOT ");
+			de.u.LoadDll.lpBaseOfDll,
+			//imageName,
+			de.u.LoadDll.nDebugInfoSize == 0 ? L"no " : L"",
+			pszFilename);
+
+
+
+	CloseHandle(de.u.LoadDll.hFile);
 
 //	if (0 == dwBase)
 //	{
@@ -610,7 +696,6 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		goto Exit;
 	}
 
-
 	if (de.u.CreateProcessInfo.lpImageName)
 	{
 		if (de.u.CreateProcessInfo.fUnicode)
@@ -623,10 +708,11 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
-	Write(WriteLevel::Info, L"CreateProcessDebugEvent process %s at 0x%x, symbols %sloaded",
-			processName,
+	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
 			de.u.CreateProcessInfo.lpStartAddress,
-			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"NOT ");
+			de.u.CreateProcessInfo.lpStartAddress,
+			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"no ",
+			processName);
 
 	//
 	// Insert a break point by replacing the first instruction
@@ -680,8 +766,6 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	DWORD64 dw64StartAddress;
 	lcContext.ContextFlags = CONTEXT_ALL;
 
-	Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
-
 	BOOL bResult = GetThreadContext(hThread, &lcContext);
 	if (!bResult)
 	{
@@ -702,6 +786,8 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	else
 #endif
 	{
+		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
+
 		GetCurrentFunctionName(hThread, hProcess, lcContext);
 
 		// This does not work when you have a physical DebugBreak() in the code
@@ -753,15 +839,26 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	DWORD64 instructionPointer;
 
 	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
-	if (FAILED(hr))
+
+	if (hr == HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND))
+	{
+		sFuntionName = "<unknown>";
+		hr = S_OK;
+	}
+	else if (hr == HRESULT_FROM_WIN32(ERROR_INVALID_ADDRESS))
+	{
+		sFuntionName = "<unknown>";
+		hr = S_OK;
+	}
+	else if (FAILED(hr))
 	{
 		Write(WriteLevel::Error, L"RetrieveCallstack failed with 0x%x.", hr);
 		goto Exit;
 	}
 
-	if (gAnalysisLevel >= 4)
+	if (gAnalysisLevel >= 4) // 4 means all code
 	{
-		lastFunctionName = sFuntionName;
+
 	}
 	else // gAnalysisLevel == 3
 	{
@@ -800,9 +897,25 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
 
 	//Write(WriteLevel::Info, L"0x%x 0x%03x %4d %s", instructionPointer, hThread, lnFunctionCalls, wsFuctionName.c_str());
-	Write(WriteLevel::Info, L"0x%03x %4d %s", hThread, lnFunctionCalls, wsFuctionName.c_str());
+	Write(WriteLevel::Info, L"0x%08x %4d %s", (DWORD)instructionPointer, lnFunctionCalls, wsFuctionName.c_str());
 
 	EXIT_FN
+}
+
+DWORD GetStartAddress( HANDLE hProcess, HANDLE hThread )
+{
+   SYMBOL_INFO *pSymbol;
+   pSymbol = (SYMBOL_INFO *)new BYTE[sizeof(SYMBOL_INFO )+MAX_SYM_NAME];
+   pSymbol->SizeOfStruct= sizeof(SYMBOL_INFO );
+   pSymbol->MaxNameLen = MAX_SYM_NAME;
+   SymFromName(hProcess,"wWinMainCRTStartup",pSymbol);
+
+   // Store address, before deleting pointer  
+   DWORD dwAddress = pSymbol->Address;
+
+   delete [](BYTE*)pSymbol; // Valid syntax!
+
+   return dwAddress;
 }
 
 HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
@@ -859,6 +972,11 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		}
 	}
 
+//IMAGEHLP_MODULE64 module={0};
+//module.SizeOfStruct = sizeof(module);
+//SymGetModuleInfo64(hProcess, (DWORD64)stack.AddrPC.Offset, &module);
+//DebugBreak();
+
 	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
 		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
@@ -903,6 +1021,13 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 
 		if (stack.AddrPC.Offset != 0)
 		{
+#if 0
+			if (FALSE == SymRefreshModuleList(hProcess))
+			{
+					Write(WriteLevel::Error, L"SymRefreshModuleList failed :(");
+			}
+#endif
+
 			// we seem to have a valid PC
 			if (SymGetSymFromAddr64(hProcess,
 										stack.AddrPC.Offset,
@@ -927,7 +1052,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			{
 				hr = HRESULT_FROM_WIN32(GetLastError());
 				Write(WriteLevel::Error,
-							L"SymGetSymFromAddr64 failed 0x%x, s.AddrPC.Offset=0x%x",
+							L"SymGetSymFromAddr64 failed 0x%x, address=0x%p",
 							hr,
 							stack.AddrPC.Offset);
 

@@ -41,8 +41,10 @@ publish: latest\$(TargetPlatform) $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(Bi
 	date /t >> latest\$(TargetPlatform)\readme.txt
 
 test: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
-	$(BinDir)\wtrace.exe -v info -a 3 "$(BinDir)\wtrace.exe -?"
+	$(BinDir)\wtrace.exe -v info -a 4 "$(BinDir)\wtrace.exe -?"
 
+testdbg: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
+	windbg $(BinDir)\wtrace.exe -v info -a 3 "$(BinDir)\wtrace.exe -?"
 
 clean:
 	IF EXIST bin\$(TargetPlatform) del /q bin\$(TargetPlatform)\*
