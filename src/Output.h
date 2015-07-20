@@ -11,4 +11,7 @@ extern WriteLevel gWriteLevelThreshold;
 extern FILE * gFp;
 extern int dFunctionDepth;
 
+
+void Interactive();
 void Write(WriteLevel level, const WCHAR * lineFormat, ...);
+

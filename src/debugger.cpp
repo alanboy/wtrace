@@ -7,7 +7,15 @@
  * ********************************************************** */
 #define UNICODE
 #define _UNICODE
+
+//#undef WIN32_NO_STATUS
 #include <windows.h>
+
+//#define WIN32_NO_STATUS
+//#define _AMD64_
+//#include <ntstatus.h>
+//#include <winnt.h>
+
 #include <stdio.h>
 #include <string>
 #include <Dbghelp.h>
@@ -18,6 +26,7 @@
 #include "Utils.h"
 #include "Main.h"
 #include "Debugger.h"
+#include "wow64.h"
 
 #define WIDE2(x) L##x
 #define WIDE1(x) WIDE2(x)
@@ -68,6 +77,7 @@ typedef struct CallstackEntry
 	CHAR loadedImageName[STACKWALK_MAX_NAMELEN];
 } CallstackEntry;
 
+
 HRESULT DumpContext(const CONTEXT& lcContext)
 {
 	ENTER_FN
@@ -82,9 +92,6 @@ HRESULT DumpContext(const CONTEXT& lcContext)
 
 	Write(WriteLevel::Debug, L"eflags = %08X",
 			lcContext.EFlags);
-
-	//Write(WriteLevel::Debug,  L"cs=0023  ss=002b  ds=002b  es=002b  fs=0053  gs=002b             efl=00000202", );
-
 #else
 	Write(WriteLevel::Debug,  L"RIP = %08X EAX = %08X EBX = %08X ECX = %08X "
 			L"RDX = %08X RSI = %08X RDI = %08X "
@@ -160,11 +167,13 @@ HRESULT Run()
 
 				switch (de.u.Exception.ExceptionRecord.ExceptionCode)
 				{
+					//////////////////////////////////////////////
+					//			NATIVE EXCEPTIONS
+					//////////////////////////////////////////////
 					case EXCEPTION_ACCESS_VIOLATION:
-					// First chance: Pass this on to the system. 
-					// Last chance: Display an appropriate error. 
-					Write(WriteLevel::Debug, L"EXCEPTION_ACCESS_VIOLATION");
-					// This happens when amd64 debugs x86
+						// First chance: Pass this on to the system. 
+						// Last chance: Display an appropriate error. 
+						ExceptionAccessViolation(pi.hProcess, pi.hThread, de.u.Exception.ExceptionRecord);
 					break;
 
 					case EXCEPTION_BREAKPOINT:
@@ -172,10 +181,9 @@ HRESULT Run()
 					break;
 
 					case EXCEPTION_DATATYPE_MISALIGNMENT: 
-					// First chance: Pass this on to the system. 
-					// Last chance: Display an appropriate error. 
-					Write(WriteLevel::Debug, L"EXCEPTION_DATATYPE_MISALIGNMENT");
-
+						// First chance: Pass this on to the system. 
+						// Last chance: Display an appropriate error. 
+						Write(WriteLevel::Debug, L"EXCEPTION_DATATYPE_MISALIGNMENT");
 					break;
 
 					case EXCEPTION_SINGLE_STEP:
@@ -196,9 +204,66 @@ HRESULT Run()
 					Write(WriteLevel::Debug, L"\tIllegal Instruction  An attempt was made to execute an illegal instruction.");
 					break;
 
+
+					//////////////////////////////////////////////
+					//				WOW Exceptions
+					//////////////////////////////////////////////
+					case STATUS_WX86_BREAKPOINT:
+						Wow64Breakpoint(pi.hProcess, pi.hThread);
+					break;
+
+					case STATUS_WX86_SINGLE_STEP:
+						//0x4000001EL
+						// http://reverseengineering.stackexchange.com/questions/9313/opening-program-via-ollydbg-immunity-in-win7-causes-exception-unless-in-xp-compa
+						Wow64SingleStep(pi.hProcess, pi.hThread);
+					break;
+
+					case STATUS_WX86_UNSIMULATE:
+						Write(WriteLevel::Info, L"STATUS_WX86_UNSIMULATE");
+					break;
+
+					case STATUS_WX86_CONTINUE:
+						Write(WriteLevel::Info, L"STATUS_WX86_CONTINUE");
+					break;
+
+					case STATUS_WX86_EXCEPTION_CONTINUE:
+						Write(WriteLevel::Info, L"STATUS_WX86_EXCEPTION_CONTINUE");
+					break;
+
+					case STATUS_WX86_EXCEPTION_LASTCHANCE:
+						Write(WriteLevel::Info, L"STATUS_WX86_EXCEPTION_LASTCHANCE");
+					break;
+
+					case STATUS_WX86_EXCEPTION_CHAIN:
+					break;
+
+					//
+					// Missing/Unknown values
+					//
+					//#define EXCEPTION_ARRAY_BOUNDS_EXCEEDED     STATUS_ARRAY_BOUNDS_EXCEEDED
+					//#define EXCEPTION_FLT_DENORMAL_OPERAND      STATUS_FLOAT_DENORMAL_OPERAND
+					//#define EXCEPTION_FLT_DIVIDE_BY_ZERO        STATUS_FLOAT_DIVIDE_BY_ZERO
+					//#define EXCEPTION_FLT_INEXACT_RESULT        STATUS_FLOAT_INEXACT_RESULT
+					//#define EXCEPTION_FLT_INVALID_OPERATION     STATUS_FLOAT_INVALID_OPERATION
+					//#define EXCEPTION_FLT_OVERFLOW              STATUS_FLOAT_OVERFLOW
+					//#define EXCEPTION_FLT_STACK_CHECK           STATUS_FLOAT_STACK_CHECK
+					//#define EXCEPTION_FLT_UNDERFLOW             STATUS_FLOAT_UNDERFLOW
+					//#define EXCEPTION_INT_DIVIDE_BY_ZERO        STATUS_INTEGER_DIVIDE_BY_ZERO
+					//#define EXCEPTION_INT_OVERFLOW              STATUS_INTEGER_OVERFLOW
+					//#define EXCEPTION_PRIV_INSTRUCTION          STATUS_PRIVILEGED_INSTRUCTION
+					//#define EXCEPTION_IN_PAGE_ERROR             STATUS_IN_PAGE_ERROR
+					//#define EXCEPTION_ILLEGAL_INSTRUCTION       STATUS_ILLEGAL_INSTRUCTION
+					//#define EXCEPTION_NONCONTINUABLE_EXCEPTION  STATUS_NONCONTINUABLE_EXCEPTION
+					//#define EXCEPTION_STACK_OVERFLOW            STATUS_STACK_OVERFLOW
+					//#define EXCEPTION_INVALID_DISPOSITION       STATUS_INVALID_DISPOSITION
+					//#define EXCEPTION_GUARD_PAGE                STATUS_GUARD_PAGE_VIOLATION
+					//#define EXCEPTION_INVALID_HANDLE            STATUS_INVALID_HANDLE
+					//#define EXCEPTION_POSSIBLE_DEADLOCK         STATUS_POSSIBLE_DEADLOCK
+					//#define CONTROL_C_EXIT                      STATUS_CONTROL_C_EXIT
+
 					default:
-					// Handle other exceptions. 
-					Write(WriteLevel::Debug, L"Unknown debug event : %x ? ", de.u.Exception.ExceptionRecord.ExceptionCode);
+						// Handle other exceptions.
+						Write(WriteLevel::Info, L"Unknown debug event : %x ", de.u.Exception.ExceptionRecord.ExceptionCode);
 					break;
 				}
 
@@ -256,7 +321,6 @@ HRESULT Run()
 		}
 
 		hr = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
-
 		if(FAILED(hr))
 		{
 			Write(WriteLevel::Error, L"Error.");
@@ -274,12 +338,100 @@ HRESULT Run()
 	EXIT_FN
 }
 
+HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTION_RECORD& exception)
+{
+	ENTER_FN
+
+	Write(WriteLevel::Info, L"EXCEPTION_ACCESS_VIOLATION at 0x%x while %s 0x%x",
+			exception.ExceptionAddress,
+			exception.ExceptionInformation[0] ? L"writing to " : L"reading from ",
+			(PVOID)exception.ExceptionInformation[1]);
+
+	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
+	LPFN_ISWOW64PROCESS fnIsWow64Process;
+	BOOL bIsWow64 = FALSE;
+	BOOL bResult = FALSE;
+
+	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
+			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
+
+
+	if(NULL != fnIsWow64Process)
+	{
+		if (!fnIsWow64Process(hProcess, &bIsWow64))
+		{
+			hr =  HRESULT_FROM_WIN32(GetLastError());
+			goto Exit;
+		}
+	}
+
+	Write(WriteLevel::Debug, L"Process is wow64: %d", bIsWow64);
+
+	if (bIsWow64)
+	{
+		WOW64_CONTEXT lcWowContext = {0};
+		lcWowContext.ContextFlags = CONTEXT_ALL;
+
+		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
+		if (!bResult)
+		{
+			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", GetLastError());
+			goto Exit;
+		}
+
+		DumpWowContext(lcWowContext);
+
+		std::string sFuntionName;
+		std::wstring wsFuctionName;
+		DWORD64 instructionPointer;
+		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
+
+		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
+		if (FAILED(hr))
+		{
+			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
+			goto Exit;
+		}
+
+		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
+		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
+	}
+	else
+	{
+		CONTEXT lcContext = {0};
+		lcContext.ContextFlags = CONTEXT_ALL;
+
+		bResult = GetThreadContext(hThread, &lcContext);
+		if (!bResult)
+		{
+			hr =  HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+			goto Exit;
+		}
+
+		DumpContext(lcContext);
+
+		hr = GetCurrentFunctionName(hThread, hProcess, lcContext);
+		if (FAILED(hr))
+		{
+			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
+			goto Exit;
+		}
+	}
+
+	Interactive();
+
+	EXIT_FN
+}
+
 HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 {
 	ENTER_FN
 
 	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
 
+
+	// @TODO Allocat based on unicode 
 	CHAR *msg = new CHAR[DebugString.nDebugStringLength];
 
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, TRUE, de.dwProcessId);
@@ -289,8 +441,6 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 		Write(WriteLevel::Error, L"OpenProcess failed 0x%x", hr);
 		goto Exit;
 	}
-
-	//// Don't care if string is ANSI, and we allocate double...
 
 	int result = ReadProcessMemory(
 			hProcess,
@@ -306,7 +456,7 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 		Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
 
 		hr = S_OK;
-		goto Exit;
+		goto Release;
 	}
 
 	if (msg)
@@ -461,7 +611,6 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 		}
 	}
 
-
 	Write(WriteLevel::Debug, L"hProcess=0x%d is %s wow64 process",
 			hProcess,
 			bIsWow64 ? L"" : L"NOT");
@@ -593,9 +742,6 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	SIZE_T lpNumberOfBytesRead;
 	LPWSTR processName = new WCHAR[MAX_PATH];
 
-	DWORD64 dw64StartAddress = 0;
-	DWORD dwStartAddress = 0;
-
 	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
 			L"hFile= 0x%08LX"
 			L" hProcess= 0x%08LX"
@@ -611,9 +757,6 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 #else
 	Write(WriteLevel::Debug, L"lpStartAddress=0x%016x", (DWORD64)de.u.CreateProcessInfo.lpStartAddress);
 #endif
-
-	dw64StartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
-	dwStartAddress = (DWORD)de.u.CreateProcessInfo.lpStartAddress;
 
 	nSpawnedProcess++;
 
@@ -708,26 +851,37 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
+#ifdef _AMD64_
+	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
+			de.u.CreateProcessInfo.lpBaseOfImage,
+			de.u.CreateProcessInfo.lpStartAddress,
+			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"no ",
+			processName);
+#else
 	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
 			de.u.CreateProcessInfo.lpStartAddress,
 			de.u.CreateProcessInfo.lpStartAddress,
 			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"no ",
 			processName);
+#endif
+
 
 	//
 	// Insert a break point by replacing the first instruction
 	//
-	BOOL bInsertBreakPoint = TRUE;
+	//dw64StartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
+	DWORD64 dw64StartAddress = 0;
+	DWORD64 dwStartAddress = 0;
+	dwStartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
+
+    // if native, this work
+	BOOL bInsertBreakPoint = FALSE; // find the right spot to do this for WOW64
 	if (bInsertBreakPoint)
 	{
 		// Read the first instruction and save it
 		int result = ReadProcessMemory(
 						hProcess,
-#ifdef _X86_
 						(void*)dwStartAddress,
-#else
-						(void*)dw64StartAddress,
-#endif
 						&cInstruction,
 						1,
 						&lpNumberOfBytesRead);
@@ -776,7 +930,7 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 
 	DumpContext(lcContext);
 
-#ifdef _X86_
+//#ifdef _X86_
 	if (firstDebugEvent)
 	{
 		// First chance: Display the current instruction and register values.
@@ -784,7 +938,7 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		firstDebugEvent = 0;
 	}
 	else
-#endif
+//#endif
 	{
 		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
 
@@ -933,6 +1087,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		goto Exit;
 	}
 
+	// @TODO make this work with wow
 #ifdef _X86_
 	stack.AddrPC.Offset = context.Eip;    // EIP - Instruction Pointer
 	stack.AddrFrame.Offset = context.Ebp; // EBP
@@ -989,6 +1144,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 #ifdef _X86_
 				IMAGE_FILE_MACHINE_I386,
 #else
+				//IMAGE_FILE_MACHINE_I386,
 				IMAGE_FILE_MACHINE_AMD64,
 #endif
 				hProcess,

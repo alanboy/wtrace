@@ -9,5 +9,5 @@ HRESULT Run();
 HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
 HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
-
+HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread,const EXCEPTION_RECORD& exception );
 

@@ -10,9 +10,11 @@ BinDir=bin\$(TargetPlatform)
 WtraceBins=bin\$(TargetPlatform)\wtrace.exe
 
 CppSources=..\..\src\Main.cpp  \
-		..\..\src\debugger.cpp  \
-		..\..\src\Output.cpp  \
-		..\..\src\Utils.cpp  \
+		..\..\src\debugger.cpp \
+		..\..\src\wow64.cpp    \
+		..\..\src\Output.cpp   \
+		..\..\src\Utils.cpp    \
+
 
 all: clean $(WtraceBins)
 	echo done!
@@ -40,8 +42,14 @@ publish: latest\$(TargetPlatform) $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(Bi
 	time /t >> latest\$(TargetPlatform)\readme.txt
 	date /t >> latest\$(TargetPlatform)\readme.txt
 
+testwow: bin\x64\wtrace.exe bin\x86\wtrace.exe bin\x86\wtrace.pdb
+	bin\x64\wtrace.exe -v info -a 3 "bin\x86\wtrace.exe -?"
+
+testwowdebug: bin\x64\wtrace.exe bin\x86\wtrace.exe bin\x86\wtrace.pdb
+	bin\x64\wtrace.exe -v debug -a 3 "bin\x86\wtrace.exe -?"
+
 test: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
-	$(BinDir)\wtrace.exe -v info -a 4 "$(BinDir)\wtrace.exe -?"
+	$(BinDir)\wtrace.exe -v info -a 3 "$(BinDir)\wtrace.exe -?"
 
 testdbg: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
 	windbg $(BinDir)\wtrace.exe -v info -a 3 "$(BinDir)\wtrace.exe -?"

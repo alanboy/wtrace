@@ -62,7 +62,7 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 		if (gFp == NULL)
 		{
 			CONSOLE_SCREEN_BUFFER_INFO csbi;
-			GetConsoleScreenBufferInfo( hstdout, &csbi );
+			GetConsoleScreenBufferInfo(hstdout, &csbi);
 
 			if (level == WriteLevel::Error)
 			{
@@ -95,10 +95,10 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 			vwprintf(lineFormat, lineArgs);
 			printf("\n");
 
-			FlushConsoleInputBuffer( hstdin );
+			FlushConsoleInputBuffer(hstdin);
 
-			SetConsoleTextAttribute( hstdout, csbi.wAttributes );
-
+			// Restore
+			SetConsoleTextAttribute(hstdout, csbi.wAttributes);
 
 			if (level == WriteLevel::Error)
 			{
