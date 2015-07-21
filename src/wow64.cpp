@@ -61,7 +61,7 @@ HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
 	EXIT_FN
 }
 
-HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
+HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD * ip)
 {
 	ENTER_FN
 
@@ -120,7 +120,7 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
 
 		//
-		// StackWalk64 only needs context when image is IMAGE_FILE_MACHINE_I386, the 
+		// StackWalk64 only needs context when image is not IMAGE_FILE_MACHINE_I386, the 
 		// context might be modified.
 		//
 		BOOL bResult = StackWalk64(
@@ -227,18 +227,18 @@ HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 
 		std::string sFuntionName;
 		std::wstring wsFuctionName;
-		DWORD64 instructionPointer;
+		DWORD instructionPointer;
 		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
 
-		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
-		if (FAILED(hr))
-		{
-			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-			goto Exit;
-		}
+		//Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
+		//if (FAILED(hr))
+		//{
+		//	Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
+		//	goto Exit;
+		//}
 
-		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
+		//wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
+		//Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
 
 	}
 
@@ -249,7 +249,7 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
-	Write(WriteLevel::Info, L"WOW64 breakpoint ");
+	Write(WriteLevel::Info, L"WOW64 breakpoint");
 
 	WOW64_CONTEXT lcWowContext = {0};
 	BOOL bResult = FALSE;
@@ -267,7 +267,7 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 		}
 
 		hr = DumpWowContext(lcWowContext);
-goto Exit;
+
 		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
 		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
 
@@ -277,22 +277,22 @@ goto Exit;
 			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
 			goto Exit;
 		}
-
-
-		std::string sFuntionName;
-		std::wstring wsFuctionName;
-		DWORD64 instructionPointer;
-		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 2 /* 1 frame */, &sFuntionName, &instructionPointer);
-
-		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
-		if (FAILED(hr))
-		{
-			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-			goto Exit;
-		}
-
-		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
+//
+//
+//		std::string sFuntionName;
+//		std::wstring wsFuctionName;
+//		DWORD64 instructionPointer;
+//		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 2 /* 1 frame */, &sFuntionName, &instructionPointer);
+//
+//		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
+//		if (FAILED(hr))
+//		{
+//			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
+//			goto Exit;
+//		}
+//
+//		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
+//		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
 
 	}
 

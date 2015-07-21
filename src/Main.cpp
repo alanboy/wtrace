@@ -86,7 +86,6 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 	gpCommandLine = (argv[argc-1]);
 
 Exit:
-
 	return;
 }
 
@@ -101,6 +100,8 @@ void WtraceUsage(void)
 
 void Logo(void)
 {
+	// @TODO put date here
+	//http://stackoverflow.com/questions/997946/how-to-get-current-time-and-date-in-c
 	printf("trace 0.1\n(c) 2014 Alan Gonzalez\n\n");
 }
 

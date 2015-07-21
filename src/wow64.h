@@ -2,7 +2,7 @@
 HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext);
 HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread);
 HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread);
-HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip);
+HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD * ip);
 
 
 // From ntstatus.h for now put it here until u figure out how to call it from the 
