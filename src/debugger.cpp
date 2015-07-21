@@ -21,6 +21,7 @@
 #include <Dbghelp.h>
 
 #include <iostream>
+#include <map>
 
 #include "output.h"
 #include "Utils.h"
@@ -56,7 +57,7 @@ bool firstDebugEvent = 1;
 std::string lastFunctionName;
 long lnFunctionCalls = 0;
 
-
+std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
 
 //#define UILD_WOW64_ENABLED 1 //?
 #define STACKWALK_MAX_NAMELEN 1024
@@ -592,6 +593,11 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
+	// Wow has its own single step, this is always native 
+	//
+#if 0
+	// when the above gets confirmed, then remove this code
+	//
 	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 	LPFN_ISWOW64PROCESS fnIsWow64Process;
 	BOOL bIsWow64 = FALSE;
@@ -624,6 +630,8 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 	{
 		hr= ExceptionSingleStepX64(hProcess, hThread);
 	}
+#endif
+	hr = ExceptionSingleStepX64(hProcess, hThread);
 
 	EXIT_FN
 }
@@ -741,28 +749,32 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	ENTER_FN
 
 	LPCREATE_PROCESS_DEBUG_INFO pCreateProcessDebugInfo = (LPCREATE_PROCESS_DEBUG_INFO)&de.u.CreateProcessInfo;
-
+	std::string sModName;
 	BYTE cInstruction;
 	HANDLE hProcess = de.u.CreateProcessInfo.hProcess;
-	IMAGEHLP_MODULE64 module_info;
+
+	IMAGEHLP_MODULE64 module_info_symbols;
+	module_info_symbols.SizeOfStruct = sizeof(module_info_symbols);
+
+	IMAGEHLP_MODULE64 module_info_module;
+	module_info_module.SizeOfStruct = sizeof(module_info_module);
+
 	SIZE_T lpNumberOfBytesRead;
 	LPWSTR processName = new WCHAR[MAX_PATH];
 
 	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
-			L"hFile= 0x%08LX"
-			L" hProcess= 0x%08LX"
-			L" hThread= 0x%08LX"
-			L" lpBaseOfImage= 0x%08LX }",
+			L"hFile=0x%08LX"
+			L" hProcess=0x%08LX"
+			L" hThread=0x%08LX",
 			pCreateProcessDebugInfo->hFile,
 			pCreateProcessDebugInfo->hProcess,
-			pCreateProcessDebugInfo->hThread,
-			pCreateProcessDebugInfo->lpBaseOfImage);
+			pCreateProcessDebugInfo->hThread);
 
-#ifdef _X86_
-	Write(WriteLevel::Debug, L"lpStartAddress=0x%08x", (DWORD)de.u.CreateProcessInfo.lpStartAddress);
-#else
-	Write(WriteLevel::Debug, L"lpStartAddress=0x%016x", (DWORD64)de.u.CreateProcessInfo.lpStartAddress);
-#endif
+	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
+			L" lpBaseOfImage=0x%p "
+			L" lpStartAddress=0x%p }",
+			pCreateProcessDebugInfo->lpBaseOfImage,
+			pCreateProcessDebugInfo->lpStartAddress);
 
 	nSpawnedProcess++;
 
@@ -822,28 +834,47 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	}
 	else
 	{
-		Write(WriteLevel::Debug , L"SymLoadModuleEx OK returned dwBase=0x%x", dwBase);
-		// why are we doing this ?
-		//dw64StartAddress = dwBase;
+		Write(WriteLevel::Debug , L"SymLoadModuleEx OK returned dwBase=0x%p", dwBase);
 	}
 
-	module_info.SizeOfStruct = sizeof(module_info);
 
 	//
 	// Retrieves the module information of the specified module.
 	//
-	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, dwStartAddress=0x%x", hProcess, dwBase);
+	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, dwStartAddress=0x%p", hProcess, dwBase);
 	BOOL bSuccess = SymGetModuleInfo64(
 			hProcess,
 			dwBase,
-			&module_info);
+			&module_info_symbols);
 
 	if (!bSuccess)
 	{
 		hr = HRESULT_FROM_WIN32(GetLastError());
-		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x", hr);
+		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x to load symbols moudule", hr);
 		goto Exit;
 	}
+
+	BREAK_IF_DEBUGGER_PRESENT();
+
+	//
+	// Retrieves the module information of the specified module.
+	//
+	bSuccess = SymGetModuleInfo64(
+			hProcess,
+			(DWORD64)de.u.CreateProcessInfo.lpStartAddress,
+			&module_info_module);
+
+	if (!bSuccess)
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p", hr, (DWORD64)de.u.CreateProcessInfo.lpStartAddress);
+		goto Exit;
+	}
+
+	
+	sModName = module_info_module.ModuleName;
+	mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModName, module_info_module));
+
 
 	if (de.u.CreateProcessInfo.lpImageName)
 	{
@@ -857,17 +888,44 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
+	//	IMAGEHLP_MODULE64
+	//   +0x000 SizeOfStruct     : 0x690
+	//   +0x008 BaseOfImage      : 0x00007ff6`d43e0000
+	//   +0x010 ImageSize        : 0x75000
+	//   +0x014 TimeDateStamp    : 0
+	//   +0x018 CheckSum         : 0
+	//   +0x01c NumSyms          : 0
+	//   +0x020 SymType          : 5 ( SymDeferred )
+	//   +0x024 ModuleName       : [32]  "updateapp"
+	//   +0x044 ImageName        : [256]  "f:\TH\bin.amd64fre\updateapp.exe"
+	//   +0x144 LoadedImageName  : [256]  ""
+	//   +0x244 LoadedPdbName    : [256]  ""
+	//   +0x344 CVSig            : 0
+	//   +0x348 CVData           : [780]  ""
+	//   +0x654 PdbSig           : 0
+	//   +0x658 PdbSig70         : _GUID {00000000-0000-0000-0000-000000000000}
+	//   +0x668 PdbAge           : 0
+	//   +0x66c PdbUnmatched     : 0n0
+	//   +0x670 DbgUnmatched     : 0n0
+	//   +0x674 LineNumbers      : 0n0
+	//   +0x678 GlobalSymbols    : 0n0
+	//   +0x67c TypeInfo         : 0n0
+	//   +0x680 SourceIndexed    : 0n0
+	//   +0x684 Publics          : 0n0
+	//   +0x688 MachineType      : 0
+	//   +0x68c Reserved         : 0
+
 #ifdef _AMD64_
 	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
 			de.u.CreateProcessInfo.lpBaseOfImage,
-			de.u.CreateProcessInfo.lpStartAddress,
-			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"no ",
+			((DWORD64)de.u.CreateProcessInfo.lpBaseOfImage + (DWORD64)module_info_module.ImageSize),
+			(bSuccess && module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
 			processName);
 #else
 	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
-			de.u.CreateProcessInfo.lpStartAddress,
-			de.u.CreateProcessInfo.lpStartAddress,
-			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"no ",
+			de.u.CreateProcessInfo.lpBaseOfImage,
+			(de.u.CreateProcessInfo.lpBaseOfImage + module_info_module.ImageSize),
+			(bSuccess && module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
 			processName);
 #endif
 
@@ -1020,8 +1078,15 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	std::string sFuntionName;
 	std::wstring wsFuctionName;
 	DWORD64 instructionPointer;
+	BOOL bSkip = FALSE;
 
-	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
+	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer, &bSkip);
+
+	if (bSkip)
+	{
+		hr = S_OK;
+		goto Exit;
+	}
 
 	if (hr == HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND))
 	{
@@ -1082,7 +1147,11 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 #ifdef _X86_
 	Write(WriteLevel::Info, L"0x%p %4d %s", (DWORD)instructionPointer, lnFunctionCalls, wsFuctionName.c_str());
 #else
-	Write(WriteLevel::Info, L"0x%p %4d %s", instructionPointer, lnFunctionCalls, wsFuctionName.c_str());
+	Write(WriteLevel::Info, L"0x%p %4d thread=%x  %s", 
+				instructionPointer,
+				lnFunctionCalls,
+				hThread,
+				wsFuctionName.c_str());
 #endif
 
 	EXIT_FN
@@ -1104,19 +1173,22 @@ DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread)
 	return dwAddress;
 }
 
-HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
+HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64* ip, BOOL* bSkip)
 {
 	ENTER_FN
 
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	CallstackEntry csEntry;
+	std::string sModuleName;
+
+	*bSkip = FALSE;
 
 	if (hThread == INVALID_HANDLE_VALUE
 			|| hProcess == INVALID_HANDLE_VALUE)
 	{
 		Write(WriteLevel::Error, L"Handles are invalid");
-		goto Exit;
+		goto Cleanup;
 	}
 
 	// @TODO make this work with wow
@@ -1154,16 +1226,33 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			{
 				hr = HRESULT_FROM_WIN32(error);
 				Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
-				goto Exit;
+				goto Cleanup;
 			}
 		}
 	}
 
-//IMAGEHLP_MODULE64 module={0};
-//module.SizeOfStruct = sizeof(module);
-//SymGetModuleInfo64(hProcess, (DWORD64)stack.AddrPC.Offset, &module);
-//DebugBreak();
+	// Find this address in the map of loaded modules,
+	// to get name
+	//(DWORD64)stack.AddrPC.Offset
 
+	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
+	Write(WriteLevel::Info, L"im looking for this address, 0x%16x", stack.AddrPC.Offset);
+	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
+	{
+		// first loaded module is the process name
+		std::wstring foo(it->first.begin(), it->first.end());
+		Write(WriteLevel::Info, L"loaded module : %s", foo);
+		Write(WriteLevel::Info, L"loaded module contains: 0x%016x - ", it->second.BaseOfImage,
+			(DWORD64)it->second.BaseOfImage + (DWORD64)it->second.ImageSize
+								);
+	}
+
+//	if (strcmp(module.ModuleName, "updateapp") != 0)
+//	{
+//		*bSkip = TRUE;
+//		goto Cleanup;
+//	}
+//
 	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
 		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
@@ -1176,7 +1265,6 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 #ifdef _X86_
 				IMAGE_FILE_MACHINE_I386,
 #else
-				//IMAGE_FILE_MACHINE_I386,
 				IMAGE_FILE_MACHINE_AMD64,
 #endif
 				hProcess,
@@ -1193,7 +1281,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			// INFO: "StackWalk64" does not set "GetLastError"...
 			hr = HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", hr);
-			goto Exit;
+			goto Cleanup;
 		}
 
 		csEntry.offset = stack.AddrPC.Offset;
@@ -1229,7 +1317,9 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 				if (sFuntionName != NULL)
 				{
 					// Copy into caller
-					*sFuntionName = pSym->Name;
+					*sFuntionName = sModuleName;
+					*sFuntionName += "!";
+					*sFuntionName += pSym->Name;
 				}
 				else
 				{
@@ -1246,13 +1336,16 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 
 				BREAK_IF_DEBUGGER_PRESENT();
 
-				goto Exit;
+				goto Cleanup;
 			}
 		}
 	}
 
-	// leaking on failure
-	delete pSym;
+Cleanup:
+	if (pSym)
+	{
+		delete pSym;
+	}
 
 	EXIT_FN
 }
