@@ -56,6 +56,7 @@ bool bSyminitialized;
 bool firstDebugEvent = 1;
 std::string lastFunctionName;
 long lnFunctionCalls = 0;
+DWORD64 g_dw64StartAddress = 0;
 
 std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
 
@@ -216,7 +217,11 @@ HRESULT Run()
 					case STATUS_WX86_SINGLE_STEP:
 						// 0x4000001EL
 						// http://reverseengineering.stackexchange.com/questions/9313/opening-program-via-ollydbg-immunity-in-win7-causes-exception-unless-in-xp-compa
-						Wow64SingleStep(pi.hProcess, pi.hThread);
+						hr = Wow64SingleStep(pi.hProcess, pi.hThread);
+						if (FAILED(hr))
+						{
+							goto Exit;
+						}
 					break;
 
 					case STATUS_WX86_UNSIMULATE:
@@ -237,10 +242,14 @@ HRESULT Run()
 
 					case STATUS_WX86_EXCEPTION_CHAIN:
 					break;
-
 					//
 					// Missing/Unknown values
 					//
+					// When using notepad in wow64, go to page setup, and you'll see this:
+					// Unknown debug event : c0020043
+					// Unknown debug event : 3e6
+					//
+					// Other missing values:
 					//#define EXCEPTION_ARRAY_BOUNDS_EXCEEDED     STATUS_ARRAY_BOUNDS_EXCEEDED
 					//#define EXCEPTION_FLT_DENORMAL_OPERAND      STATUS_FLOAT_DENORMAL_OPERAND
 					//#define EXCEPTION_FLT_DIVIDE_BY_ZERO        STATUS_FLOAT_DIVIDE_BY_ZERO
@@ -893,6 +902,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
+	// @TODO get the size of the loaded module
 #ifdef _AMD64_
 	Write(WriteLevel::Info, L" %p   \t (%sdebug info) \t %s",
 			de.u.CreateProcessInfo.lpBaseOfImage,
@@ -911,9 +921,11 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	//
 	// Insert a break point by replacing the first instruction
 	//
-	//DWORD64 dw64StartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
 	DWORD64 dwStartAddress = 0;
 	dwStartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
+
+	// I'll need this to set the wow64 breakpoint
+	g_dw64StartAddress = dwStartAddress;
 
 	// Insert breakpoint for native
 	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
@@ -934,7 +946,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 	Write(WriteLevel::Debug, L"Process is wow64: %d", bIsWow64);
 
-	BOOL bInsertBreakPoint = !bIsWow64; 
+	BOOL bInsertBreakPoint = !bIsWow64;
 
 #ifdef _X86_
 	bInsertBreakPoint = TRUE;
@@ -1172,7 +1184,6 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		goto Cleanup;
 	}
 
-	// @TODO make this work with wow
 #ifdef _X86_
 	stack.AddrPC.Offset = context.Eip;    // EIP - Instruction Pointer
 	stack.AddrFrame.Offset = context.Ebp; // EBP

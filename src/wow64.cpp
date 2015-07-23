@@ -15,6 +15,8 @@
 #include <Dbghelp.h>
 
 
+#include <map>
+
 #include "output.h"
 #include "Utils.h"
 #include "Main.h"
@@ -43,6 +45,8 @@
 #define STACKWALK_MAX_NAMELEN 1024
 
 extern bool bSyminitialized;
+extern std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
+extern DWORD64 g_dw64StartAddress;
 
 HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
 {
@@ -68,6 +72,10 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	//CallstackEntry csEntry;
+	std::string sModuleName;
+	bool bModuleFound = FALSE;
+	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
+
 
 	if (hThread == INVALID_HANDLE_VALUE
 			|| hProcess == INVALID_HANDLE_VALUE)
@@ -111,10 +119,46 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 		}
 	}
 
-	//IMAGEHLP_MODULE64 module={0};
-	//module.SizeOfStruct = sizeof(module);
-	//SymGetModuleInfo64(hProcess, (DWORD64)stack.AddrPC.Offset, &module);
-	//DebugBreak();
+	// We have the IP, search in the cache first before calling API to get the mod name
+	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
+	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
+	{
+		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
+				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
+		{
+			sModuleName = it->first;
+			bModuleFound = TRUE;
+		}
+	}
+
+	if (!bModuleFound)
+	{
+		// if we got out, this means we havent loaded this module, do it
+		IMAGEHLP_MODULE64 module_info_module;
+		module_info_module.SizeOfStruct = sizeof(module_info_module);
+
+		BOOL bSuccess = SymGetModuleInfo64(
+				hProcess,
+				(DWORD)stack.AddrPC.Offset,
+				&module_info_module);
+
+		if (!bSuccess)
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
+					hr, (DWORD64)stack.AddrPC.Offset);
+
+			DumpWowContext(context);
+
+			goto Exit;
+		}
+		else
+		{
+			// Add this new found module to the cache
+			sModuleName = module_info_module.ModuleName;
+			mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
+		}
+	}
 
 	for (int frameNum = 0; (nFramesToRead==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
@@ -232,11 +276,11 @@ HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
 
 		//Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
-		//if (FAILED(hr))
-		//{
-		//	Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-		//	goto Exit;
-		//}
+		if (FAILED(hr))
+		{
+			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
+			goto Exit;
+		}
 
 		//wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
 		//Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
@@ -268,7 +312,7 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 		}
 
 		hr = DumpWowContext(lcWowContext);
-
+#if 0
 		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
 		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
 
@@ -277,6 +321,70 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 			hr =  HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
 			goto Exit;
+		}
+#endif
+
+
+		/////////////////////////////////////////////////////////////////
+		// If this is our first time hitting WoW64 BreakPoint, set a BP 
+		// at the start address 
+		//
+		// Read the first instruction and save it
+		BYTE cInstruction;
+		SIZE_T lpNumberOfBytesRead;
+		int result = ReadProcessMemory(
+						hProcess,
+						(void*)g_dw64StartAddress,
+						&cInstruction,
+						1,
+						&lpNumberOfBytesRead);
+
+		if (result == 0)
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
+			goto Exit;
+		}
+
+		if (cInstruction != 0xCC)
+		{
+			Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, g_dw64StartAddress);
+
+			//m_OriginalInstruction = cInstruction;
+
+			// Replace it with Breakpoint
+			cInstruction = 0xCC;
+
+			WriteProcessMemory(hProcess, (void*)g_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
+
+			FlushInstructionCache(hProcess, (void*)g_dw64StartAddress, 1);
+		}
+
+
+		/////////////////////////////////////////////////////////////////
+		// IF we are hitting a BP i set, restore the instruction
+		//
+
+		if (m_OriginalInstruction != 0)
+		{
+			Write(WriteLevel::Debug, L"Writing back original instruction ");
+
+			SIZE_T lNumberOfBytesRead;
+
+#ifdef _X86_
+			lcContext.Eip--;
+			DWORD dwStartAddress;
+			dwStartAddress = lcContext.Eip;
+			WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+			FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
+#else
+			lcContext.Rip--;
+			dw64StartAddress = lcContext.Rip;
+			WriteProcessMemory(hProcess, (LPVOID)dw64StartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+			FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
+#endif
+
+			m_OriginalInstruction = 0;
 		}
 //
 //
