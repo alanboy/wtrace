@@ -356,7 +356,6 @@ HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTIO
 	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
 			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
 
-
 	if(NULL != fnIsWow64Process)
 	{
 		if (!fnIsWow64Process(hProcess, &bIsWow64))
@@ -718,8 +717,7 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 			de.u.LoadDll.nDebugInfoSize == 0 ? L"no " : L"",
 			pszFilename);
 
-
-
+Cleanup:
 	CloseHandle(de.u.LoadDll.hFile);
 
 //	if (0 == dwBase)
@@ -749,7 +747,6 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	ENTER_FN
 
 	LPCREATE_PROCESS_DEBUG_INFO pCreateProcessDebugInfo = (LPCREATE_PROCESS_DEBUG_INFO)&de.u.CreateProcessInfo;
-	std::string sModName;
 	BYTE cInstruction;
 	HANDLE hProcess = de.u.CreateProcessInfo.hProcess;
 
@@ -858,23 +855,33 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 	//
 	// Retrieves the module information of the specified module.
+#if 0
+	// http://stackoverflow.com/questions/27026579/symgetlinefromaddr64-gives-errors-7e-1e7//
 	//
+	// It appears that CREATE_PROCESS_DEBUG_EVENT is too early to execute
+	// SymLoadModule64, the modules must not have been loaded yet at that
+	// point. If instead I do it 'just-in-time' when a program breakpoint
+	// gets hit (ie in FindCode) it seems to work with no problems.
+
 	bSuccess = SymGetModuleInfo64(
 			hProcess,
-			(DWORD64)de.u.CreateProcessInfo.lpStartAddress,
+			((DWORD64)de.u.CreateProcessInfo.lpStartAddress)+1,
 			&module_info_module);
 
 	if (!bSuccess)
 	{
 		hr = HRESULT_FROM_WIN32(GetLastError());
-		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p", hr, (DWORD64)de.u.CreateProcessInfo.lpStartAddress);
-		goto Exit;
+		Write(WriteLevel::Error, L"SymGetModuleInfo64 for module failed with 0x%x at addess %p", 
+				hr, ((DWORD64)de.u.CreateProcessInfo.lpStartAddress)+1);
+		hr = S_OK;
+//		goto Exit;
 	}
-
-	
-	sModName = module_info_module.ModuleName;
-	mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModName, module_info_module));
-
+	else
+	{
+		smodname = module_info_module.modulename;
+		mloadedmodules.insert(std::pair<std::string, imagehlp_module64>(smodname, module_info_module));
+	}
+#endif
 
 	if (de.u.CreateProcessInfo.lpImageName)
 	{
@@ -888,44 +895,17 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
-	//	IMAGEHLP_MODULE64
-	//   +0x000 SizeOfStruct     : 0x690
-	//   +0x008 BaseOfImage      : 0x00007ff6`d43e0000
-	//   +0x010 ImageSize        : 0x75000
-	//   +0x014 TimeDateStamp    : 0
-	//   +0x018 CheckSum         : 0
-	//   +0x01c NumSyms          : 0
-	//   +0x020 SymType          : 5 ( SymDeferred )
-	//   +0x024 ModuleName       : [32]  "updateapp"
-	//   +0x044 ImageName        : [256]  "f:\TH\bin.amd64fre\updateapp.exe"
-	//   +0x144 LoadedImageName  : [256]  ""
-	//   +0x244 LoadedPdbName    : [256]  ""
-	//   +0x344 CVSig            : 0
-	//   +0x348 CVData           : [780]  ""
-	//   +0x654 PdbSig           : 0
-	//   +0x658 PdbSig70         : _GUID {00000000-0000-0000-0000-000000000000}
-	//   +0x668 PdbAge           : 0
-	//   +0x66c PdbUnmatched     : 0n0
-	//   +0x670 DbgUnmatched     : 0n0
-	//   +0x674 LineNumbers      : 0n0
-	//   +0x678 GlobalSymbols    : 0n0
-	//   +0x67c TypeInfo         : 0n0
-	//   +0x680 SourceIndexed    : 0n0
-	//   +0x684 Publics          : 0n0
-	//   +0x688 MachineType      : 0
-	//   +0x68c Reserved         : 0
-
 #ifdef _AMD64_
-	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
+	Write(WriteLevel::Info, L" %p   \t (%sdebug info) \t %s",
 			de.u.CreateProcessInfo.lpBaseOfImage,
-			((DWORD64)de.u.CreateProcessInfo.lpBaseOfImage + (DWORD64)module_info_module.ImageSize),
-			(bSuccess && module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
+			//(DWORD64)de.u.CreateProcessInfo.lpBaseOfImage, // + (DWORD64)module_info_module.ImageSize),
+			(module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
 			processName);
 #else
-	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
+	Write(WriteLevel::Info, L" %p  \t (%sdebug info) \t %s",
 			de.u.CreateProcessInfo.lpBaseOfImage,
-			(de.u.CreateProcessInfo.lpBaseOfImage + module_info_module.ImageSize),
-			(bSuccess && module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
+			//de.u.CreateProcessInfo.lpBaseOfImage, // + module_info_module.ImageSize),
+			(module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
 			processName);
 #endif
 
@@ -1231,28 +1211,99 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		}
 	}
 
-	// Find this address in the map of loaded modules,
-	// to get name
-	//(DWORD64)stack.AddrPC.Offset
+	//
+	// Retrieves the module information of the specified module.
+	//
+	//	IMAGEHLP_MODULE64
+	//   +0x000 SizeOfStruct     : 0x690
+	//   +0x008 BaseOfImage      : 0x00007ff6`d43e0000
+	//   +0x010 ImageSize        : 0x75000
+	//   +0x014 TimeDateStamp    : 0
+	//   +0x018 CheckSum         : 0
+	//   +0x01c NumSyms          : 0
+	//   +0x020 SymType          : 5 ( SymDeferred )
+	//   +0x024 ModuleName       : [32]  "updateapp"
+	//   +0x044 ImageName        : [256]  "f:\TH\bin.amd64fre\updateapp.exe"
+	//   +0x144 LoadedImageName  : [256]  ""
+	//   +0x244 LoadedPdbName    : [256]  ""
+	//   +0x344 CVSig            : 0
+	//   +0x348 CVData           : [780]  ""
+	//   +0x654 PdbSig           : 0
+	//   +0x658 PdbSig70         : _GUID {00000000-0000-0000-0000-000000000000}
+	//   +0x668 PdbAge           : 0
+	//   +0x66c PdbUnmatched     : 0n0
+	//   +0x670 DbgUnmatched     : 0n0
+	//   +0x674 LineNumbers      : 0n0
+	//   +0x678 GlobalSymbols    : 0n0
+	//   +0x67c TypeInfo         : 0n0
+	//   +0x680 SourceIndexed    : 0n0
+	//   +0x684 Publics          : 0n0
+	//   +0x688 MachineType      : 0
+	//   +0x68c Reserved         : 0
 
+	// Search this module in the map
+	//Write(WriteLevel::Info, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
-	Write(WriteLevel::Info, L"im looking for this address, 0x%16x", stack.AddrPC.Offset);
+	bool bModuleFound = FALSE;
 	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
 	{
-		// first loaded module is the process name
-		std::wstring foo(it->first.begin(), it->first.end());
-		Write(WriteLevel::Info, L"loaded module : %s", foo);
-		Write(WriteLevel::Info, L"loaded module contains: 0x%016x - ", it->second.BaseOfImage,
-			(DWORD64)it->second.BaseOfImage + (DWORD64)it->second.ImageSize
-								);
+		//std::wstring wsModuleName(it->first.begin(), it->first.end());
+		//Write(WriteLevel::Info, L"in list: module : %s", wsModuleName);
+		//Write(WriteLevel::Info, L"loaded module contains: 0x%px - 0x%px", it->second.BaseOfImage, it->second.BaseOfImage + it->second.ImageSize,
+		//	(DWORD64)it->second.BaseOfImage + (DWORD64)it->second.ImageSize
+		//						);
+
+		//(DWORD64)it->second.BaseOfImage + (DWORD64)it->second.ImageSize
+		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
+				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
+
+		{
+			sModuleName = it->first;
+			bModuleFound = TRUE;
+		}
 	}
 
-//	if (strcmp(module.ModuleName, "updateapp") != 0)
-//	{
-//		*bSkip = TRUE;
-//		goto Cleanup;
-//	}
-//
+	if (!bModuleFound)
+	{
+		// if we got out, this means we havent loaded this module, do it
+		IMAGEHLP_MODULE64 module_info_module;
+		module_info_module.SizeOfStruct = sizeof(module_info_module);
+
+		BOOL bSuccess = SymGetModuleInfo64(
+				hProcess,
+				stack.AddrPC.Offset,
+				&module_info_module);
+
+		if (!bSuccess)
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
+					hr, (DWORD64)stack.AddrPC.Offset);
+			//hr = S_OK;
+			goto Exit;
+		}
+		else
+		{
+			//Write(WriteLevel::Info, L"SymGetModuleInfo64 succeeded  at addess %p and got this:",
+			//	 (DWORD64)stack.AddrPC.Offset);
+			//std::cout << module_info_module.ModuleName << std::endl;
+			sModuleName = module_info_module.ModuleName;
+			mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
+		}
+	}
+
+
+	if ( sModuleName.compare("ntdll") == 0
+			||sModuleName.compare("KERNELBASE") == 0
+			||sModuleName.compare("msvcrt") == 0
+			||sModuleName.compare("dbghelp") == 0
+			||sModuleName.compare("KERNEL32") == 0
+			)
+	{
+		*bSkip = TRUE;
+		goto Cleanup;
+	}
+
 	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
 		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", hProcess, hThread);
