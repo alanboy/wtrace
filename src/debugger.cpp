@@ -700,7 +700,7 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 			if (hr != HRESULT_FROM_WIN32(ERROR_PARTIAL_COPY))
 			{
 				Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
-				goto Exit;
+				goto Cleanup;
 			}
 
 			hr = S_OK;
@@ -709,10 +709,9 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 		//Write(WriteLevel::Info, L"ReadProcessMemory read 0x%x bytes %s ", lpNumberOfBytesRead, cInstruction);
 	}
 
-	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
+	Write(WriteLevel::Info, L" %p \t (%sdebug info) \t %s",
 			de.u.LoadDll.lpBaseOfDll,
-			de.u.LoadDll.lpBaseOfDll,
-			//imageName,
+			//de.u.LoadDll.lpBaseOfDll,
 			de.u.LoadDll.nDebugInfoSize == 0 ? L"no " : L"",
 			pszFilename);
 
@@ -920,7 +919,6 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 	LPFN_ISWOW64PROCESS fnIsWow64Process;
 	BOOL bIsWow64 = FALSE;
-	BOOL bResult = FALSE;
 
 	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
 			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
@@ -1136,6 +1134,7 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	EXIT_FN
 }
 
+#if 0
 DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread)
 {
 	SYMBOL_INFO *pSymbol;
@@ -1151,6 +1150,7 @@ DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread)
 
 	return dwAddress;
 }
+#endif
 
 HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64* ip, BOOL* bSkip)
 {
@@ -1160,6 +1160,8 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	CallstackEntry csEntry;
 	std::string sModuleName;
+	bool bModuleFound = FALSE;
+	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
 
 	*bSkip = FALSE;
 
@@ -1212,8 +1214,6 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 
 	// We have the IP, search in the cache first before calling API to get the mod name
 	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
-	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
-	bool bModuleFound = FALSE;
 	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
 	{
 		if ((stack.AddrPC.Offset > it->second.BaseOfImage)

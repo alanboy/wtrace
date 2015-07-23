@@ -81,7 +81,8 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 	stack.AddrFrame.Offset = context.Ebp; // EBP
 	stack.AddrStack.Offset = context.Esp; // ESP - Stack Pointer
 
-	*ip = stack.AddrPC.Offset;
+	// C4244: Possible loss of precision
+	*ip = (DWORD)stack.AddrPC.Offset;
 
 	// Must be like this
 	stack.AddrPC.Mode = AddrModeFlat;
