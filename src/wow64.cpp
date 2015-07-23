@@ -110,10 +110,10 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 		}
 	}
 
-//IMAGEHLP_MODULE64 module={0};
-//module.SizeOfStruct = sizeof(module);
-//SymGetModuleInfo64(hProcess, (DWORD64)stack.AddrPC.Offset, &module);
-//DebugBreak();
+	//IMAGEHLP_MODULE64 module={0};
+	//module.SizeOfStruct = sizeof(module);
+	//SymGetModuleInfo64(hProcess, (DWORD64)stack.AddrPC.Offset, &module);
+	//DebugBreak();
 
 	for (int frameNum = 0; (nFramesToRead==0) || (frameNum < nFramesToRead); ++frameNum)
 	{

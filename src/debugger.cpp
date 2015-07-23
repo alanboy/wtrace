@@ -214,7 +214,7 @@ HRESULT Run()
 					break;
 
 					case STATUS_WX86_SINGLE_STEP:
-						//0x4000001EL
+						// 0x4000001EL
 						// http://reverseengineering.stackexchange.com/questions/9313/opening-program-via-ollydbg-immunity-in-win7-causes-exception-unless-in-xp-compa
 						Wow64SingleStep(pi.hProcess, pi.hThread);
 					break;
@@ -429,7 +429,6 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 	ENTER_FN
 
 	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
-
 
 	// @TODO Allocat based on unicode 
 	CHAR *msg = new CHAR[DebugString.nDebugStringLength];
@@ -1211,52 +1210,14 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		}
 	}
 
-	//
-	// Retrieves the module information of the specified module.
-	//
-	//	IMAGEHLP_MODULE64
-	//   +0x000 SizeOfStruct     : 0x690
-	//   +0x008 BaseOfImage      : 0x00007ff6`d43e0000
-	//   +0x010 ImageSize        : 0x75000
-	//   +0x014 TimeDateStamp    : 0
-	//   +0x018 CheckSum         : 0
-	//   +0x01c NumSyms          : 0
-	//   +0x020 SymType          : 5 ( SymDeferred )
-	//   +0x024 ModuleName       : [32]  "updateapp"
-	//   +0x044 ImageName        : [256]  "f:\TH\bin.amd64fre\updateapp.exe"
-	//   +0x144 LoadedImageName  : [256]  ""
-	//   +0x244 LoadedPdbName    : [256]  ""
-	//   +0x344 CVSig            : 0
-	//   +0x348 CVData           : [780]  ""
-	//   +0x654 PdbSig           : 0
-	//   +0x658 PdbSig70         : _GUID {00000000-0000-0000-0000-000000000000}
-	//   +0x668 PdbAge           : 0
-	//   +0x66c PdbUnmatched     : 0n0
-	//   +0x670 DbgUnmatched     : 0n0
-	//   +0x674 LineNumbers      : 0n0
-	//   +0x678 GlobalSymbols    : 0n0
-	//   +0x67c TypeInfo         : 0n0
-	//   +0x680 SourceIndexed    : 0n0
-	//   +0x684 Publics          : 0n0
-	//   +0x688 MachineType      : 0
-	//   +0x68c Reserved         : 0
-
-	// Search this module in the map
-	//Write(WriteLevel::Info, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
+	// We have the IP, search in the cache first before calling API to get the mod name
+	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
 	bool bModuleFound = FALSE;
 	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
 	{
-		//std::wstring wsModuleName(it->first.begin(), it->first.end());
-		//Write(WriteLevel::Info, L"in list: module : %s", wsModuleName);
-		//Write(WriteLevel::Info, L"loaded module contains: 0x%px - 0x%px", it->second.BaseOfImage, it->second.BaseOfImage + it->second.ImageSize,
-		//	(DWORD64)it->second.BaseOfImage + (DWORD64)it->second.ImageSize
-		//						);
-
-		//(DWORD64)it->second.BaseOfImage + (DWORD64)it->second.ImageSize
 		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
 				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
-
 		{
 			sModuleName = it->first;
 			bModuleFound = TRUE;
@@ -1279,26 +1240,22 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			hr = HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
 					hr, (DWORD64)stack.AddrPC.Offset);
-			//hr = S_OK;
 			goto Exit;
 		}
 		else
 		{
-			//Write(WriteLevel::Info, L"SymGetModuleInfo64 succeeded  at addess %p and got this:",
-			//	 (DWORD64)stack.AddrPC.Offset);
-			//std::cout << module_info_module.ModuleName << std::endl;
+			// Add this new found module to the cache
 			sModuleName = module_info_module.ModuleName;
 			mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
 		}
 	}
 
-
-	if ( sModuleName.compare("ntdll") == 0
-			||sModuleName.compare("KERNELBASE") == 0
-			||sModuleName.compare("msvcrt") == 0
-			||sModuleName.compare("dbghelp") == 0
-			||sModuleName.compare("KERNEL32") == 0
-			)
+	// This needs work, maybe configurable to say what to and not to show
+	if (sModuleName.compare("ntdll") == 0
+			|| sModuleName.compare("KERNELBASE") == 0
+			|| sModuleName.compare("msvcrt") == 0
+			|| sModuleName.compare("dbghelp") == 0
+			|| sModuleName.compare("KERNEL32") == 0)
 	{
 		*bSkip = TRUE;
 		goto Cleanup;
