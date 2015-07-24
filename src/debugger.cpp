@@ -8,14 +8,7 @@
 #define UNICODE
 #define _UNICODE
 
-//#undef WIN32_NO_STATUS
 #include <windows.h>
-
-//#define WIN32_NO_STATUS
-//#define _AMD64_
-//#include <ntstatus.h>
-//#include <winnt.h>
-
 #include <stdio.h>
 #include <string>
 #include <Dbghelp.h>
@@ -60,23 +53,11 @@ DWORD64 g_dw64StartAddress = 0;
 
 std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
 
-//#define UILD_WOW64_ENABLED 1 //?
 #define STACKWALK_MAX_NAMELEN 1024
 typedef struct CallstackEntry
 {
 	DWORD64 offset;  // if 0, we have no valid entry
-	CHAR name[STACKWALK_MAX_NAMELEN];
-	CHAR undName[STACKWALK_MAX_NAMELEN];
-	CHAR undFullName[STACKWALK_MAX_NAMELEN];
 	DWORD64 offsetFromSmybol;
-	DWORD offsetFromLine;
-	DWORD lineNumber;
-	CHAR lineFileName[STACKWALK_MAX_NAMELEN];
-	DWORD symType;
-	LPCSTR symTypeString;
-	CHAR moduleName[STACKWALK_MAX_NAMELEN];
-	DWORD64 baseOfImage;
-	CHAR loadedImageName[STACKWALK_MAX_NAMELEN];
 } CallstackEntry;
 
 
@@ -374,38 +355,9 @@ HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTIO
 		}
 	}
 
-	Write(WriteLevel::Debug, L"Process is wow64: %d", bIsWow64);
+	Write(WriteLevel::Debug, L"Process is WoW64: %d", bIsWow64);
 
-	if (bIsWow64)
-	{
-//		WOW64_CONTEXT lcWowContext = {0};
-//		lcWowContext.ContextFlags = CONTEXT_ALL;
-//
-//		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
-//		if (!bResult)
-//		{
-//			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", GetLastError());
-//			goto Exit;
-//		}
-//
-//		DumpWowContext(lcWowContext);
-//
-//		std::string sFuntionName;
-//		std::wstring wsFuctionName;
-//		DWORD64 instructionPointer;
-//		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
-//
-//		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
-//		if (FAILED(hr))
-//		{
-//			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-//			goto Exit;
-//		}
-//
-//		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-//		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
-	}
-	else
+	if (!bIsWow64)
 	{
 		CONTEXT lcContext = {0};
 		lcContext.ContextFlags = CONTEXT_ALL;
@@ -500,64 +452,13 @@ Release:
 
 	EXIT_FN
 }
-#if 0
-HRESULT ExceptionSingleStepWow64(HANDLE hProcess, HANDLE hThread)
+
+HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
-	WOW64_CONTEXT lcWowContext = {0};
-	BOOL bResult = FALSE;
-
-	if (gAnalysisLevel >= 3)
-	{
-		lcWowContext.ContextFlags = CONTEXT_ALL;
-
-		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
-		if (!bResult)
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
-			goto Exit;
-		}
-
-		hr = DumpContext(*((CONTEXT*)&lcWowContext));
-
-		hr = GetCurrentFunctionName(hThread, hProcess, *((CONTEXT*)&lcWowContext));
-		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
-		if (FAILED(hr))
-		{
-			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-			goto Exit;
-		}
-
-		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-
-		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-		if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
-			goto Exit;
-		}
-
-//		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
-//		if (!bResult)
-//		{
-//			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", GetLastError());
-//			goto Exit;
-//		}
-//		DumpContext(*((CONTEXT*)&lcWowContext));
-	}
-
-	EXIT_FN
-
-}
-#endif
-
-HRESULT ExceptionSingleStepX64(HANDLE hProcess, HANDLE hThread)
-{
-	ENTER_FN
-
+	// Wow has its own single step, this is always native 
+	//
 	CONTEXT lcContext = {0};
 
 	if (gAnalysisLevel >= 3)
@@ -596,53 +497,6 @@ HRESULT ExceptionSingleStepX64(HANDLE hProcess, HANDLE hThread)
 	EXIT_FN
 }
 
-HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
-{
-	ENTER_FN
-
-	// Wow has its own single step, this is always native 
-	//
-#if 0
-	// when the above gets confirmed, then remove this code
-	//
-	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
-	LPFN_ISWOW64PROCESS fnIsWow64Process;
-	BOOL bIsWow64 = FALSE;
-
-	//IsWow64Process is not available on all supported versions of Windows.
-	//Use GetModuleHandle to get a handle to the DLL that contains the function
-	//and GetProcAddress to get a pointer to the function if available.
-	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
-			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
-
-	if(NULL != fnIsWow64Process)
-	{
-		if (!fnIsWow64Process(hProcess, &bIsWow64))
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			goto Exit;
-		}
-	}
-
-	Write(WriteLevel::Debug, L"hProcess=0x%d is %s wow64 process",
-			hProcess,
-			bIsWow64 ? L"" : L"NOT");
-
-	if (bIsWow64)
-	{
-		//hr = ExceptionSingleStepWow64(hProcess, hThread);
-		hr= ExceptionSingleStepX64(hProcess, hThread);
-	}
-	else
-	{
-		hr= ExceptionSingleStepX64(hProcess, hThread);
-	}
-#endif
-	hr = ExceptionSingleStepX64(hProcess, hThread);
-
-	EXIT_FN
-}
-
 HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 {
 	ENTER_FN
@@ -662,7 +516,7 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 	}
 
 	Write(WriteLevel::Debug, L"SymLoadModuleEx on hProcess0x%x", hProcess);
-// For upcoming LOAD_DLL_DEBUG_EVENTs, we also need to call this function for the respective DLL being loaded.
+	// For upcoming LOAD_DLL_DEBUG_EVENTs, we also need to call this function for the respective DLL being loaded.
 	dwBase = SymLoadModuleEx(
 			hProcess,
 			de.u.LoadDll.hFile,
@@ -675,9 +529,9 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 
 	if (dwBase == 0)
 	{
-//If the function succeeds, the return value is the base address of the loaded module.
-//If the function fails, the return value is zero. To retrieve extended error information, call GetLastError.
-//If the module is already loaded, the return value is zero and GetLastError returns ERROR_SUCCESS.
+	//If the function succeeds, the return value is the base address of the loaded module.
+	//If the function fails, the return value is zero. To retrieve extended error information, call GetLastError.
+	//If the module is already loaded, the return value is zero and GetLastError returns ERROR_SUCCESS.
 		Write(WriteLevel::Debug, L"SymLoadModuleEx returnd 0x%x", dwBase);
 	}
 
@@ -726,25 +580,6 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 
 Cleanup:
 	CloseHandle(de.u.LoadDll.hFile);
-
-//	if (0 == dwBase)
-//	{
-//		Write(WriteLevel::Error, L"SymLoadModuleEx failed with 0x%x", GetLastError());
-//		goto Exit;
-//	}
-//
-//	module_info.SizeOfStruct = sizeof(module_info);
-//	bSuccess = SymGetModuleInfo64(
-//			hProcess,
-//			dwBase,
-//			&module_info);
-//
-//
-//	if (!bSuccess)
-//	{
-//		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with %x", GetLastError());
-//		goto Exit;
-//	}
 
 	EXIT_FN
 }
@@ -862,33 +697,16 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 	//
 	// Retrieves the module information of the specified module.
-#if 0
-	// http://stackoverflow.com/questions/27026579/symgetlinefromaddr64-gives-errors-7e-1e7//
+	// bSuccess = SymGetModuleInfo64(
+	//
+	//
 	//
 	// It appears that CREATE_PROCESS_DEBUG_EVENT is too early to execute
 	// SymLoadModule64, the modules must not have been loaded yet at that
 	// point. If instead I do it 'just-in-time' when a program breakpoint
 	// gets hit (ie in FindCode) it seems to work with no problems.
-
-	bSuccess = SymGetModuleInfo64(
-			hProcess,
-			((DWORD64)de.u.CreateProcessInfo.lpStartAddress)+1,
-			&module_info_module);
-
-	if (!bSuccess)
-	{
-		hr = HRESULT_FROM_WIN32(GetLastError());
-		Write(WriteLevel::Error, L"SymGetModuleInfo64 for module failed with 0x%x at addess %p", 
-				hr, ((DWORD64)de.u.CreateProcessInfo.lpStartAddress)+1);
-		hr = S_OK;
-//		goto Exit;
-	}
-	else
-	{
-		smodname = module_info_module.modulename;
-		mloadedmodules.insert(std::pair<std::string, imagehlp_module64>(smodname, module_info_module));
-	}
-#endif
+	//			 http://stackoverflow.com/questions/27026579/symgetlinefromaddr64-gives-errors-7e-1e7//
+	//
 
 	if (de.u.CreateProcessInfo.lpImageName)
 	{
@@ -1261,11 +1079,12 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 	}
 
 	// This needs work, maybe configurable to say what to and not to show
-	if (sModuleName.compare("ntdll") == 0
+	if ((gAnalysisLevel == 3) &&
+			(sModuleName.compare("ntdll") == 0
 			|| sModuleName.compare("KERNELBASE") == 0
 			|| sModuleName.compare("msvcrt") == 0
 			|| sModuleName.compare("dbghelp") == 0
-			|| sModuleName.compare("KERNEL32") == 0)
+			|| sModuleName.compare("KERNEL32") == 0))
 	{
 		*bSkip = TRUE;
 		goto Cleanup;
@@ -1303,15 +1122,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		}
 
 		csEntry.offset = stack.AddrPC.Offset;
-		csEntry.name[0] = 0;
-		csEntry.undName[0] = 0;
-		csEntry.undFullName[0] = 0;
 		csEntry.offsetFromSmybol = 0;
-		csEntry.offsetFromLine = 0;
-		csEntry.lineFileName[0] = 0;
-		csEntry.lineNumber = 0;
-		csEntry.loadedImageName[0] = 0;
-		csEntry.moduleName[0] = 0;
 
 		if (stack.AddrPC.Offset != 0)
 		{

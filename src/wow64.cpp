@@ -9,11 +9,9 @@
 
 
 #include <windows.h>
-
 #include <stdio.h>
 #include <string>
 #include <Dbghelp.h>
-
 
 #include <map>
 
@@ -48,6 +46,7 @@ extern bool bSyminitialized;
 extern std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
 extern DWORD64 g_dw64StartAddress;
 extern BYTE m_OriginalInstruction;
+BOOL gbFirst = TRUE;
 
 HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
 {
@@ -72,7 +71,6 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
-	//CallstackEntry csEntry;
 	std::string sModuleName;
 	bool bModuleFound = FALSE;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
@@ -140,17 +138,18 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 
 		BOOL bSuccess = SymGetModuleInfo64(
 				hProcess,
-				(DWORD)stack.AddrPC.Offset,
+				stack.AddrPC.Offset,
 				&module_info_module);
 
 		if (!bSuccess)
 		{
 			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
-					hr, (DWORD64)stack.AddrPC.Offset);
+			//Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
+			//		hr, (DWORD64)stack.AddrPC.Offset);
 
 			DumpWowContext(context);
-
+	
+			hr = S_OK;
 			goto Exit;
 		}
 		else
@@ -163,6 +162,17 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 					(DWORD64)stack.AddrPC.Offset);
 		}
 	}
+
+//	if ((gAnalysisLevel == 3) &&
+//			(sModuleName.compare("ntdll") == 0
+//			|| sModuleName.compare("KERNELBASE") == 0
+//			|| sModuleName.compare("msvcrt") == 0
+//			|| sModuleName.compare("dbghelp") == 0
+//			|| sModuleName.compare("KERNEL32") == 0))
+//	{
+//		*bSkip = TRUE;
+//		goto Cleanup;
+//	}
 
 	for (int frameNum = 0; (nFramesToRead==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
@@ -289,14 +299,16 @@ HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 		}
 
 		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
+
+		Write(WriteLevel::Info, L"0x%08x thread=%x  %s", 
+				instructionPointer,
+				hThread,
+				wsFuctionName.c_str());
 
 	}
 
 	EXIT_FN
 }
-
-BOOL gbFirst = TRUE;
 
 HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 {
@@ -320,17 +332,6 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 		}
 
 		hr = DumpWowContext(lcWowContext);
-#if 0
-		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-
-		if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
-			goto Exit;
-		}
-#endif
 
 		if (gbFirst)
 		{
@@ -371,7 +372,6 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 		}
 		else
 		{
-
 			/////////////////////////////////////////////////////////////////
 			// IF we are hitting a BP i set, restore the instruction
 			//
