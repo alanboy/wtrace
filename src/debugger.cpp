@@ -1022,7 +1022,6 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		// This does not work when you have a physical DebugBreak() in the code
 		//Write(WriteLevel::Debug, L"Instruction pointer minus 1");
 
-
 		if (m_OriginalInstruction != 0)
 		{
 			Write(WriteLevel::Debug, L"Writing back original instruction ");

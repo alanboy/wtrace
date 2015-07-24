@@ -47,6 +47,7 @@
 extern bool bSyminitialized;
 extern std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
 extern DWORD64 g_dw64StartAddress;
+extern BYTE m_OriginalInstruction;
 
 HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
 {
@@ -157,6 +158,9 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 			// Add this new found module to the cache
 			sModuleName = module_info_module.ModuleName;
 			mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
+
+			Write(WriteLevel::Debug, L"SymGetModuleInfo64 ok ataddress %p",
+					(DWORD64)stack.AddrPC.Offset);
 		}
 	}
 
@@ -173,7 +177,8 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 				hProcess,
 				hThread,
 				&stack,
-				NULL,// (PVOID)(&context), // Only needed when MachineType  != IMAGE_FILE_MACHINE_I386
+				NULL,// (PVOID)(&context), 
+				// Only needed when MachineType  != IMAGE_FILE_MACHINE_I386
 				NULL,
 				SymFunctionTableAccess64,
 				SymGetModuleBase64,
@@ -209,7 +214,9 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 				if (sFuntionName != NULL)
 				{
 					// Copy into caller
-					*sFuntionName = pSym->Name;
+					*sFuntionName = sModuleName;
+					*sFuntionName += "!";
+					*sFuntionName += pSym->Name;
 				}
 				else
 				{
@@ -275,20 +282,21 @@ HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 		DWORD instructionPointer;
 		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
 
-		//Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
 		if (FAILED(hr))
 		{
 			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
 			goto Exit;
 		}
 
-		//wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-		//Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
+		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
+		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
 
 	}
 
 	EXIT_FN
 }
+
+BOOL gbFirst = TRUE;
 
 HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 {
@@ -324,69 +332,74 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 		}
 #endif
 
-
-		/////////////////////////////////////////////////////////////////
-		// If this is our first time hitting WoW64 BreakPoint, set a BP 
-		// at the start address 
-		//
-		// Read the first instruction and save it
-		BYTE cInstruction;
-		SIZE_T lpNumberOfBytesRead;
-		int result = ReadProcessMemory(
-						hProcess,
-						(void*)g_dw64StartAddress,
-						&cInstruction,
-						1,
-						&lpNumberOfBytesRead);
-
-		if (result == 0)
+		if (gbFirst)
 		{
-			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
-			goto Exit;
-		}
+			gbFirst = FALSE;
+			/////////////////////////////////////////////////////////////////
+			// If this is our first time hitting WoW64 BreakPoint, set a BP
+			// at the start address 
+			//
+			// Read the first instruction and save it
+			BYTE cInstruction;
+			SIZE_T lpNumberOfBytesRead;
+			int result = ReadProcessMemory(
+					hProcess,
+					(void*)g_dw64StartAddress,
+					&cInstruction,
+					1,
+					&lpNumberOfBytesRead);
 
-		if (cInstruction != 0xCC)
+			if (result == 0)
+			{
+				hr = HRESULT_FROM_WIN32(GetLastError());
+				Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
+				goto Exit;
+			}
+			if (cInstruction != 0xCC)
+			{
+				Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, g_dw64StartAddress);
+
+				m_OriginalInstruction = cInstruction;
+
+				// Replace it with Breakpoint
+				cInstruction = 0xCC;
+
+				WriteProcessMemory(hProcess, (void*)g_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
+
+				FlushInstructionCache(hProcess, (void*)g_dw64StartAddress, 1);
+			}
+		}
+		else
 		{
-			Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, g_dw64StartAddress);
 
-			//m_OriginalInstruction = cInstruction;
+			/////////////////////////////////////////////////////////////////
+			// IF we are hitting a BP i set, restore the instruction
+			//
+			if (m_OriginalInstruction != 0)
+			{
+				Write(WriteLevel::Debug, L"Writing back original instruction ");
 
-			// Replace it with Breakpoint
-			cInstruction = 0xCC;
+				SIZE_T lNumberOfBytesRead;
 
-			WriteProcessMemory(hProcess, (void*)g_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
+				lcWowContext.Eip--;
+				DWORD dwStartAddress;
+				dwStartAddress = lcWowContext.Eip;
+				WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+				FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
 
-			FlushInstructionCache(hProcess, (void*)g_dw64StartAddress, 1);
+				m_OriginalInstruction = 0;
+
+				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+				lcWowContext.EFlags |= 0x100;
+
+				if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
+				{
+					hr =  HRESULT_FROM_WIN32(GetLastError());
+					Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
+					goto Exit;
+				}
+			}
 		}
-
-
-		/////////////////////////////////////////////////////////////////
-		// IF we are hitting a BP i set, restore the instruction
-		//
-
-		if (m_OriginalInstruction != 0)
-		{
-			Write(WriteLevel::Debug, L"Writing back original instruction ");
-
-			SIZE_T lNumberOfBytesRead;
-
-#ifdef _X86_
-			lcContext.Eip--;
-			DWORD dwStartAddress;
-			dwStartAddress = lcContext.Eip;
-			WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
-			FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
-#else
-			lcContext.Rip--;
-			dw64StartAddress = lcContext.Rip;
-			WriteProcessMemory(hProcess, (LPVOID)dw64StartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
-			FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
-#endif
-
-			m_OriginalInstruction = 0;
-		}
-//
 //
 //		std::string sFuntionName;
 //		std::wstring wsFuctionName;
