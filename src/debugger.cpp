@@ -21,6 +21,7 @@
 #include <Dbghelp.h>
 
 #include <iostream>
+#include <map>
 
 #include "output.h"
 #include "Utils.h"
@@ -55,8 +56,9 @@ bool bSyminitialized;
 bool firstDebugEvent = 1;
 std::string lastFunctionName;
 long lnFunctionCalls = 0;
+DWORD64 g_dw64StartAddress = 0;
 
-
+std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
 
 //#define UILD_WOW64_ENABLED 1 //?
 #define STACKWALK_MAX_NAMELEN 1024
@@ -213,9 +215,13 @@ HRESULT Run()
 					break;
 
 					case STATUS_WX86_SINGLE_STEP:
-						//0x4000001EL
+						// 0x4000001EL
 						// http://reverseengineering.stackexchange.com/questions/9313/opening-program-via-ollydbg-immunity-in-win7-causes-exception-unless-in-xp-compa
-						Wow64SingleStep(pi.hProcess, pi.hThread);
+						hr = Wow64SingleStep(pi.hProcess, pi.hThread);
+						if (FAILED(hr))
+						{
+							goto Exit;
+						}
 					break;
 
 					case STATUS_WX86_UNSIMULATE:
@@ -236,10 +242,14 @@ HRESULT Run()
 
 					case STATUS_WX86_EXCEPTION_CHAIN:
 					break;
-
 					//
 					// Missing/Unknown values
 					//
+					// When using notepad in wow64, go to page setup, and you'll see this:
+					// Unknown debug event : c0020043
+					// Unknown debug event : 3e6
+					//
+					// Other missing values:
 					//#define EXCEPTION_ARRAY_BOUNDS_EXCEEDED     STATUS_ARRAY_BOUNDS_EXCEEDED
 					//#define EXCEPTION_FLT_DENORMAL_OPERAND      STATUS_FLOAT_DENORMAL_OPERAND
 					//#define EXCEPTION_FLT_DIVIDE_BY_ZERO        STATUS_FLOAT_DIVIDE_BY_ZERO
@@ -355,7 +365,6 @@ HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTIO
 	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
 			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
 
-
 	if(NULL != fnIsWow64Process)
 	{
 		if (!fnIsWow64Process(hProcess, &bIsWow64))
@@ -429,7 +438,6 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 	ENTER_FN
 
 	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
-
 
 	// @TODO Allocat based on unicode 
 	CHAR *msg = new CHAR[DebugString.nDebugStringLength];
@@ -592,6 +600,11 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
+	// Wow has its own single step, this is always native 
+	//
+#if 0
+	// when the above gets confirmed, then remove this code
+	//
 	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 	LPFN_ISWOW64PROCESS fnIsWow64Process;
 	BOOL bIsWow64 = FALSE;
@@ -624,6 +637,8 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 	{
 		hr= ExceptionSingleStepX64(hProcess, hThread);
 	}
+#endif
+	hr = ExceptionSingleStepX64(hProcess, hThread);
 
 	EXIT_FN
 }
@@ -694,7 +709,7 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 			if (hr != HRESULT_FROM_WIN32(ERROR_PARTIAL_COPY))
 			{
 				Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
-				goto Exit;
+				goto Cleanup;
 			}
 
 			hr = S_OK;
@@ -703,15 +718,13 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 		//Write(WriteLevel::Info, L"ReadProcessMemory read 0x%x bytes %s ", lpNumberOfBytesRead, cInstruction);
 	}
 
-	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
+	Write(WriteLevel::Info, L" %p \t (%sdebug info) \t %s",
 			de.u.LoadDll.lpBaseOfDll,
-			de.u.LoadDll.lpBaseOfDll,
-			//imageName,
+			//de.u.LoadDll.lpBaseOfDll,
 			de.u.LoadDll.nDebugInfoSize == 0 ? L"no " : L"",
 			pszFilename);
 
-
-
+Cleanup:
 	CloseHandle(de.u.LoadDll.hFile);
 
 //	if (0 == dwBase)
@@ -741,28 +754,31 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	ENTER_FN
 
 	LPCREATE_PROCESS_DEBUG_INFO pCreateProcessDebugInfo = (LPCREATE_PROCESS_DEBUG_INFO)&de.u.CreateProcessInfo;
-
 	BYTE cInstruction;
 	HANDLE hProcess = de.u.CreateProcessInfo.hProcess;
-	IMAGEHLP_MODULE64 module_info;
+
+	IMAGEHLP_MODULE64 module_info_symbols;
+	module_info_symbols.SizeOfStruct = sizeof(module_info_symbols);
+
+	IMAGEHLP_MODULE64 module_info_module;
+	module_info_module.SizeOfStruct = sizeof(module_info_module);
+
 	SIZE_T lpNumberOfBytesRead;
 	LPWSTR processName = new WCHAR[MAX_PATH];
 
 	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
-			L"hFile= 0x%08LX"
-			L" hProcess= 0x%08LX"
-			L" hThread= 0x%08LX"
-			L" lpBaseOfImage= 0x%08LX }",
+			L"hFile=0x%08LX"
+			L" hProcess=0x%08LX"
+			L" hThread=0x%08LX",
 			pCreateProcessDebugInfo->hFile,
 			pCreateProcessDebugInfo->hProcess,
-			pCreateProcessDebugInfo->hThread,
-			pCreateProcessDebugInfo->lpBaseOfImage);
+			pCreateProcessDebugInfo->hThread);
 
-#ifdef _X86_
-	Write(WriteLevel::Debug, L"lpStartAddress=0x%08x", (DWORD)de.u.CreateProcessInfo.lpStartAddress);
-#else
-	Write(WriteLevel::Debug, L"lpStartAddress=0x%016x", (DWORD64)de.u.CreateProcessInfo.lpStartAddress);
-#endif
+	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
+			L" lpBaseOfImage=0x%p "
+			L" lpStartAddress=0x%p }",
+			pCreateProcessDebugInfo->lpBaseOfImage,
+			pCreateProcessDebugInfo->lpStartAddress);
 
 	nSpawnedProcess++;
 
@@ -822,28 +838,57 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	}
 	else
 	{
-		Write(WriteLevel::Debug , L"SymLoadModuleEx OK returned dwBase=0x%x", dwBase);
-		// why are we doing this ?
-		//dw64StartAddress = dwBase;
+		Write(WriteLevel::Debug , L"SymLoadModuleEx OK returned dwBase=0x%p", dwBase);
 	}
 
-	module_info.SizeOfStruct = sizeof(module_info);
 
 	//
 	// Retrieves the module information of the specified module.
 	//
-	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, dwStartAddress=0x%x", hProcess, dwBase);
+	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, dwStartAddress=0x%p", hProcess, dwBase);
 	BOOL bSuccess = SymGetModuleInfo64(
 			hProcess,
 			dwBase,
-			&module_info);
+			&module_info_symbols);
 
 	if (!bSuccess)
 	{
 		hr = HRESULT_FROM_WIN32(GetLastError());
-		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x", hr);
+		Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x to load symbols moudule", hr);
 		goto Exit;
 	}
+
+	BREAK_IF_DEBUGGER_PRESENT();
+
+	//
+	// Retrieves the module information of the specified module.
+#if 0
+	// http://stackoverflow.com/questions/27026579/symgetlinefromaddr64-gives-errors-7e-1e7//
+	//
+	// It appears that CREATE_PROCESS_DEBUG_EVENT is too early to execute
+	// SymLoadModule64, the modules must not have been loaded yet at that
+	// point. If instead I do it 'just-in-time' when a program breakpoint
+	// gets hit (ie in FindCode) it seems to work with no problems.
+
+	bSuccess = SymGetModuleInfo64(
+			hProcess,
+			((DWORD64)de.u.CreateProcessInfo.lpStartAddress)+1,
+			&module_info_module);
+
+	if (!bSuccess)
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"SymGetModuleInfo64 for module failed with 0x%x at addess %p", 
+				hr, ((DWORD64)de.u.CreateProcessInfo.lpStartAddress)+1);
+		hr = S_OK;
+//		goto Exit;
+	}
+	else
+	{
+		smodname = module_info_module.modulename;
+		mloadedmodules.insert(std::pair<std::string, imagehlp_module64>(smodname, module_info_module));
+	}
+#endif
 
 	if (de.u.CreateProcessInfo.lpImageName)
 	{
@@ -857,17 +902,18 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		}
 	}
 
+	// @TODO get the size of the loaded module
 #ifdef _AMD64_
-	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
+	Write(WriteLevel::Info, L" %p   \t (%sdebug info) \t %s",
 			de.u.CreateProcessInfo.lpBaseOfImage,
-			de.u.CreateProcessInfo.lpStartAddress,
-			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"no ",
+			//(DWORD64)de.u.CreateProcessInfo.lpBaseOfImage, // + (DWORD64)module_info_module.ImageSize),
+			(module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
 			processName);
 #else
-	Write(WriteLevel::Info, L" %p - %p \t (%sdebug info) \t %s",
-			de.u.CreateProcessInfo.lpStartAddress,
-			de.u.CreateProcessInfo.lpStartAddress,
-			(bSuccess && module_info.SymType == SymPdb) ? L"" : L"no ",
+	Write(WriteLevel::Info, L" %p  \t (%sdebug info) \t %s",
+			de.u.CreateProcessInfo.lpBaseOfImage,
+			//de.u.CreateProcessInfo.lpBaseOfImage, // + module_info_module.ImageSize),
+			(module_info_symbols.SymType == SymPdb) ? L"" : L"no ",
 			processName);
 #endif
 
@@ -875,15 +921,16 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	//
 	// Insert a break point by replacing the first instruction
 	//
-	//DWORD64 dw64StartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
 	DWORD64 dwStartAddress = 0;
 	dwStartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
+
+	// I'll need this to set the wow64 breakpoint
+	g_dw64StartAddress = dwStartAddress;
 
 	// Insert breakpoint for native
 	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
 	LPFN_ISWOW64PROCESS fnIsWow64Process;
 	BOOL bIsWow64 = FALSE;
-	BOOL bResult = FALSE;
 
 	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
 			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
@@ -899,7 +946,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 	Write(WriteLevel::Debug, L"Process is wow64: %d", bIsWow64);
 
-	BOOL bInsertBreakPoint = !bIsWow64; 
+	BOOL bInsertBreakPoint = !bIsWow64;
 
 #ifdef _X86_
 	bInsertBreakPoint = TRUE;
@@ -975,7 +1022,6 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		// This does not work when you have a physical DebugBreak() in the code
 		//Write(WriteLevel::Debug, L"Instruction pointer minus 1");
 
-
 		if (m_OriginalInstruction != 0)
 		{
 			Write(WriteLevel::Debug, L"Writing back original instruction ");
@@ -1020,8 +1066,15 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	std::string sFuntionName;
 	std::wstring wsFuctionName;
 	DWORD64 instructionPointer;
+	BOOL bSkip = FALSE;
 
-	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
+	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer, &bSkip);
+
+	if (bSkip)
+	{
+		hr = S_OK;
+		goto Exit;
+	}
 
 	if (hr == HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND))
 	{
@@ -1082,12 +1135,17 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 #ifdef _X86_
 	Write(WriteLevel::Info, L"0x%p %4d %s", (DWORD)instructionPointer, lnFunctionCalls, wsFuctionName.c_str());
 #else
-	Write(WriteLevel::Info, L"0x%p %4d %s", instructionPointer, lnFunctionCalls, wsFuctionName.c_str());
+	Write(WriteLevel::Info, L"0x%p %4d thread=%x  %s", 
+				instructionPointer,
+				lnFunctionCalls,
+				hThread,
+				wsFuctionName.c_str());
 #endif
 
 	EXIT_FN
 }
 
+#if 0
 DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread)
 {
 	SYMBOL_INFO *pSymbol;
@@ -1103,23 +1161,28 @@ DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread)
 
 	return dwAddress;
 }
+#endif
 
-HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip)
+HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64* ip, BOOL* bSkip)
 {
 	ENTER_FN
 
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	CallstackEntry csEntry;
+	std::string sModuleName;
+	bool bModuleFound = FALSE;
+	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
+
+	*bSkip = FALSE;
 
 	if (hThread == INVALID_HANDLE_VALUE
 			|| hProcess == INVALID_HANDLE_VALUE)
 	{
 		Write(WriteLevel::Error, L"Handles are invalid");
-		goto Exit;
+		goto Cleanup;
 	}
 
-	// @TODO make this work with wow
 #ifdef _X86_
 	stack.AddrPC.Offset = context.Eip;    // EIP - Instruction Pointer
 	stack.AddrFrame.Offset = context.Ebp; // EBP
@@ -1154,15 +1217,59 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			{
 				hr = HRESULT_FROM_WIN32(error);
 				Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
-				goto Exit;
+				goto Cleanup;
 			}
 		}
 	}
 
-//IMAGEHLP_MODULE64 module={0};
-//module.SizeOfStruct = sizeof(module);
-//SymGetModuleInfo64(hProcess, (DWORD64)stack.AddrPC.Offset, &module);
-//DebugBreak();
+	// We have the IP, search in the cache first before calling API to get the mod name
+	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
+	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
+	{
+		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
+				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
+		{
+			sModuleName = it->first;
+			bModuleFound = TRUE;
+		}
+	}
+
+	if (!bModuleFound)
+	{
+		// if we got out, this means we havent loaded this module, do it
+		IMAGEHLP_MODULE64 module_info_module;
+		module_info_module.SizeOfStruct = sizeof(module_info_module);
+
+		BOOL bSuccess = SymGetModuleInfo64(
+				hProcess,
+				stack.AddrPC.Offset,
+				&module_info_module);
+
+		if (!bSuccess)
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
+					hr, (DWORD64)stack.AddrPC.Offset);
+			goto Exit;
+		}
+		else
+		{
+			// Add this new found module to the cache
+			sModuleName = module_info_module.ModuleName;
+			mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
+		}
+	}
+
+	// This needs work, maybe configurable to say what to and not to show
+	if (sModuleName.compare("ntdll") == 0
+			|| sModuleName.compare("KERNELBASE") == 0
+			|| sModuleName.compare("msvcrt") == 0
+			|| sModuleName.compare("dbghelp") == 0
+			|| sModuleName.compare("KERNEL32") == 0)
+	{
+		*bSkip = TRUE;
+		goto Cleanup;
+	}
 
 	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
@@ -1176,7 +1283,6 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 #ifdef _X86_
 				IMAGE_FILE_MACHINE_I386,
 #else
-				//IMAGE_FILE_MACHINE_I386,
 				IMAGE_FILE_MACHINE_AMD64,
 #endif
 				hProcess,
@@ -1193,7 +1299,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			// INFO: "StackWalk64" does not set "GetLastError"...
 			hr = HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", hr);
-			goto Exit;
+			goto Cleanup;
 		}
 
 		csEntry.offset = stack.AddrPC.Offset;
@@ -1229,7 +1335,9 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 				if (sFuntionName != NULL)
 				{
 					// Copy into caller
-					*sFuntionName = pSym->Name;
+					*sFuntionName = sModuleName;
+					*sFuntionName += "!";
+					*sFuntionName += pSym->Name;
 				}
 				else
 				{
@@ -1246,13 +1354,16 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 
 				BREAK_IF_DEBUGGER_PRESENT();
 
-				goto Exit;
+				goto Cleanup;
 			}
 		}
 	}
 
-	// leaking on failure
-	delete pSym;
+Cleanup:
+	if (pSym)
+	{
+		delete pSym;
+	}
 
 	EXIT_FN
 }
