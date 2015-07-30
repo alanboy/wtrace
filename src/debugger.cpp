@@ -21,12 +21,17 @@
 #include "Main.h"
 #include "Debugger.h"
 #include "wow64.h"
+#include "html.h"
+
+DWORD gStartTicks = 0;
+int gAnalysisLevel = 0;
+#define STACKWALK_MAX_NAMELEN 1024
 
 #define WIDE2(x) L##x
 #define WIDE1(x) WIDE2(x)
 #define ENTER_FN \
 			dFunctionDepth++; \
-			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__)); \
+			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__) L" at %d",  GetTickCount() - gStartTicks); \
 			dFunctionDepth++; \
 			HRESULT hr = S_OK;
 
@@ -35,31 +40,11 @@
 			if (0,0) goto Exit; \
 			Exit: \
 			dFunctionDepth--; \
-			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__)); \
+			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__) L" at %d",  GetTickCount() - gStartTicks); \
 			dFunctionDepth--; \
 			return hr;
 
 #define BREAK_IF_DEBUGGER_PRESENT() if (IsDebuggerPresent()) DebugBreak();
-
-int gAnalysisLevel;
-BYTE m_OriginalInstruction;
-DWORD processNameLen;
-int nSpawnedProcess;
-bool bSyminitialized;
-bool firstDebugEvent = 1;
-std::string lastFunctionName;
-long lnFunctionCalls = 0;
-DWORD64 g_dw64StartAddress = 0;
-
-std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
-
-#define STACKWALK_MAX_NAMELEN 1024
-typedef struct CallstackEntry
-{
-	DWORD64 offset;  // if 0, we have no valid entry
-	DWORD64 offsetFromSmybol;
-} CallstackEntry;
-
 
 HRESULT DumpContext(const CONTEXT& lcContext)
 {
@@ -91,7 +76,7 @@ HRESULT DumpContext(const CONTEXT& lcContext)
 	EXIT_FN
 }
 
-HRESULT Run()
+HRESULT DebugEngine::Run()
 {
 	ENTER_FN
 
@@ -99,10 +84,14 @@ HRESULT Run()
 	int bCreateProcRes;
 	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
-	bSyminitialized = FALSE;
+	WowDebugEngine wow64engine;
+
+	m_bSymInitialized = FALSE;
+	m_iSpawnedProcess = 0;
+
+	HtmlOutput html;
 
 	// Ref count of processes created
-	nSpawnedProcess = 0;
 
 	memset(&si, 0, sizeof(si));
 	memset(&pi, 0, sizeof(pi));
@@ -111,6 +100,7 @@ HRESULT Run()
 
 	SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
 	DWORD StartTicks = GetTickCount();
+	gStartTicks = StartTicks;
 
 	bCreateProcRes = CreateProcess(NULL, gpCommandLine, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
 
@@ -127,7 +117,7 @@ HRESULT Run()
 									pi.hProcess,
 									pi.hThread,
 									pi.dwProcessId);
-	nSpawnedProcess++;
+	m_iSpawnedProcess++;
 
 	int bContinue = TRUE;
 	while (bContinue)
@@ -192,13 +182,14 @@ HRESULT Run()
 					//				WOW Exceptions
 					//////////////////////////////////////////////
 					case STATUS_WX86_BREAKPOINT:
-						Wow64Breakpoint(pi.hProcess, pi.hThread);
+						wow64engine.SetStartAddress(m_dw64StartAddress);
+						wow64engine.Wow64Breakpoint(pi.hProcess, pi.hThread);
 					break;
 
 					case STATUS_WX86_SINGLE_STEP:
 						// 0x4000001EL
 						// http://reverseengineering.stackexchange.com/questions/9313/opening-program-via-ollydbg-immunity-in-win7-causes-exception-unless-in-xp-compa
-						hr = Wow64SingleStep(pi.hProcess, pi.hThread);
+						hr = wow64engine.Wow64SingleStep(pi.hProcess, pi.hThread);
 						if (FAILED(hr))
 						{
 							goto Exit;
@@ -284,9 +275,9 @@ HRESULT Run()
 
 			 case EXIT_PROCESS_DEBUG_EVENT: 
 			 // Display the process's exit code. 
-				nSpawnedProcess--;
+				m_iSpawnedProcess--;
 
-				if (nSpawnedProcess == 1)  bContinue = false;
+				if (m_iSpawnedProcess == 1)  bContinue = false;
 
 				Write(WriteLevel::Debug, L"EXIT_PROCESS_DEBUG_EVENT");
 				break;
@@ -329,7 +320,7 @@ HRESULT Run()
 	EXIT_FN
 }
 
-HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTION_RECORD& exception)
+HRESULT DebugEngine::ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTION_RECORD& exception)
 {
 	ENTER_FN
 
@@ -346,7 +337,7 @@ HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTIO
 	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
 			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
 
-	if(NULL != fnIsWow64Process)
+	if (NULL != fnIsWow64Process)
 	{
 		if (!fnIsWow64Process(hProcess, &bIsWow64))
 		{
@@ -385,13 +376,13 @@ HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTIO
 	EXIT_FN
 }
 
-HRESULT DebugStringEvent(const DEBUG_EVENT& de)
+HRESULT DebugEngine::DebugStringEvent(const DEBUG_EVENT& de)
 {
 	ENTER_FN
 
 	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
 
-	// @TODO Allocat based on unicode 
+	// @TODO Allocate based on unicode
 	CHAR *msg = new CHAR[DebugString.nDebugStringLength];
 
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, TRUE, de.dwProcessId);
@@ -416,7 +407,7 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 		Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
 
 		hr = S_OK;
-		goto Release;
+		goto Cleanup;
 	}
 
 	if (msg)
@@ -424,7 +415,7 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 		if (msg[0] == 0xd && msg[1] == 0xa)
 		{
 			// <CR><LF> - Carriage regurn & New line, if we dont do this, Acces Violation when trying to print this 
-			goto Release;
+			goto Cleanup;
 		}
 	}
 
@@ -440,8 +431,7 @@ HRESULT DebugStringEvent(const DEBUG_EVENT& de)
 		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT: %s ", wsOuput);
 	}
 
-Release:
-	// Leaked on exit
+Cleanup:
 	delete [] msg;
 
 	if (hProcess)
@@ -453,10 +443,11 @@ Release:
 	EXIT_FN
 }
 
-HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
+HRESULT DebugEngine::ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
+	//
 	// Wow has its own single step, this is always native 
 	//
 	CONTEXT lcContext = {0};
@@ -497,7 +488,7 @@ HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 	EXIT_FN
 }
 
-HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
+HRESULT DebugEngine::LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 {
 	ENTER_FN
 
@@ -516,16 +507,17 @@ HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 	}
 
 	Write(WriteLevel::Debug, L"SymLoadModuleEx on hProcess0x%x", hProcess);
+
 	// For upcoming LOAD_DLL_DEBUG_EVENTs, we also need to call this function for the respective DLL being loaded.
 	dwBase = SymLoadModuleEx(
 			hProcess,
 			de.u.LoadDll.hFile,
-			NULL,//_In_  PCTSTR ImageName,
-			NULL,//_In_  PCTSTR ModuleName,
-			(DWORD64)de.u.LoadDll.lpBaseOfDll,//_In_  DWORD64 BaseOfDll,
-			0,//_In_  DWORD DllSize,
-			NULL,//_In_  PMODLOAD_DATA Data,
-			0);//_In_  DWORD Flags
+			NULL,
+			NULL,
+			(DWORD64)de.u.LoadDll.lpBaseOfDll,
+			0,
+			NULL,
+			0);
 
 	if (dwBase == 0)
 	{
@@ -584,7 +576,7 @@ Cleanup:
 	EXIT_FN
 }
 
-HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
+HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 {
 	ENTER_FN
 
@@ -615,14 +607,14 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 			pCreateProcessDebugInfo->lpBaseOfImage,
 			pCreateProcessDebugInfo->lpStartAddress);
 
-	nSpawnedProcess++;
+	m_iSpawnedProcess++;
 
-	processNameLen = GetFinalPathNameByHandleW(
+	m_dwProcessNameLen = GetFinalPathNameByHandleW(
 						de.u.CreateProcessInfo.hFile,
 						processName,
 						MAX_PATH,
 						0);
-	if (processNameLen == 0)
+	if (m_dwProcessNameLen == 0)
 	{
 			hr =  HRESULT_FROM_WIN32(GetLastError());
 		Write(WriteLevel::Error, L"GetFinalPathNameByHandleW failed: %x", hr);
@@ -680,7 +672,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	//
 	// Retrieves the module information of the specified module.
 	//
-	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, dwStartAddress=0x%p", hProcess, dwBase);
+	Write(WriteLevel::Debug , L"SymGetModuleInfo64 on hProcess=0x%x, Start Address=0x%p", hProcess, dwBase);
 	BOOL bSuccess = SymGetModuleInfo64(
 			hProcess,
 			dwBase,
@@ -699,15 +691,12 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	// Retrieves the module information of the specified module.
 	// bSuccess = SymGetModuleInfo64(
 	//
-	//
-	//
 	// It appears that CREATE_PROCESS_DEBUG_EVENT is too early to execute
 	// SymLoadModule64, the modules must not have been loaded yet at that
 	// point. If instead I do it 'just-in-time' when a program breakpoint
 	// gets hit (ie in FindCode) it seems to work with no problems.
 	//			 http://stackoverflow.com/questions/27026579/symgetlinefromaddr64-gives-errors-7e-1e7//
 	//
-
 	if (de.u.CreateProcessInfo.lpImageName)
 	{
 		if (de.u.CreateProcessInfo.fUnicode)
@@ -739,11 +728,10 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	//
 	// Insert a break point by replacing the first instruction
 	//
-	DWORD64 dwStartAddress = 0;
-	dwStartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
+	
 
 	// I'll need this to set the wow64 breakpoint
-	g_dw64StartAddress = dwStartAddress;
+	m_dw64StartAddress = (DWORD64)de.u.CreateProcessInfo.lpStartAddress;
 
 	// Insert breakpoint for native
 	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
@@ -775,7 +763,7 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		// Read the first instruction and save it
 		int result = ReadProcessMemory(
 						hProcess,
-						(void*)dwStartAddress,
+						(void*)m_dw64StartAddress,
 						&cInstruction,
 						1,
 						&lpNumberOfBytesRead);
@@ -789,23 +777,21 @@ HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 		if (cInstruction != 0xCC)
 		{
-			Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, dwStartAddress);
+			Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, m_dw64StartAddress);
 
-			m_OriginalInstruction = cInstruction;
+			m_bOriginalInstruction = cInstruction;
 
 			// Replace it with Breakpoint
 			cInstruction = 0xCC;
-
-			WriteProcessMemory(hProcess, (void*)dwStartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
-
-			FlushInstructionCache(hProcess, (void*)dwStartAddress, 1);
+			WriteProcessMemory(hProcess, (void*)m_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
+			FlushInstructionCache(hProcess, (void*)m_dw64StartAddress, 1);
 		}
 	}
 
 	EXIT_FN
 }
 
-HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
+HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 {
 	ENTER_FN
 
@@ -824,11 +810,11 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	DumpContext(lcContext);
 
 //#ifdef _X86_
-	if (firstDebugEvent)
+	if (m_bfirstDebugEvent)
 	{
 		// First chance: Display the current instruction and register values.
 		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT (first) ignoring...");
-		firstDebugEvent = 0;
+		m_bfirstDebugEvent = 0;
 	}
 	else
 //#endif
@@ -838,9 +824,7 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 		GetCurrentFunctionName(hThread, hProcess, lcContext);
 
 		// This does not work when you have a physical DebugBreak() in the code
-		//Write(WriteLevel::Debug, L"Instruction pointer minus 1");
-
-		if (m_OriginalInstruction != 0)
+		if (m_bOriginalInstruction != 0)
 		{
 			Write(WriteLevel::Debug, L"Writing back original instruction ");
 
@@ -850,16 +834,16 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 			lcContext.Eip--;
 			DWORD dwStartAddress;
 			dwStartAddress = lcContext.Eip;
-			WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+			WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_bOriginalInstruction, 1, &lNumberOfBytesRead);
 			FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
 #else
 			lcContext.Rip--;
 			dw64StartAddress = lcContext.Rip;
-			WriteProcessMemory(hProcess, (LPVOID)dw64StartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+			WriteProcessMemory(hProcess, (LPVOID)dw64StartAddress, &m_bOriginalInstruction, 1, &lNumberOfBytesRead);
 			FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
 #endif
 
-			m_OriginalInstruction = 0;
+			m_bOriginalInstruction = 0;
 		}
 
 		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
@@ -877,7 +861,7 @@ HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	EXIT_FN
 }
 
-HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context)
+HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context)
 {
 	ENTER_FN
 
@@ -916,46 +900,35 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	}
 	else // gAnalysisLevel == 3
 	{
-		if (sFuntionName.compare(lastFunctionName) == 0)
+		if (sFuntionName.compare(m_sLastFunctionName) == 0)
 		{
 			goto Exit;
 		}
 		else
 		{
-			lastFunctionName = sFuntionName;
+			m_sLastFunctionName = sFuntionName;
 		}
 	}
 
-	lnFunctionCalls++;
-
-#if 0
-#ifdef _X86_
-	//instructionPointer -= 1; //instruction pointer minus 1 is the reaal deal; but why ?
-	printf("%p ", (DWORD)instructionPointer);
-
-	if ((DWORD)instructionPointer != 0xFFFFFFFF)
-	{
-		int* pcontent = (int*)instructionPointer;
-		int content = *pcontent;
-
-		printf(" %2x ", content);
-	}
-
-#else
-	printf("0x%016x ", instructionPointer);
-	//printf("%5x ", *instructionPointer);
-#endif
-#endif
-
+	m_lFunctionCalls++;
 
 	wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
 
+	//
+	// Note that this instructionPointer is not the last instruction
+	//
+	//
+	// @TODO print memory contents at that address
+	//
 #ifdef _X86_
-	Write(WriteLevel::Info, L"0x%p %4d %s", (DWORD)instructionPointer, lnFunctionCalls, wsFuctionName.c_str());
+	Write(WriteLevel::Info, L"0x%p %4d %s",
+				(DWORD)instructionPointer,
+				m_lFunctionCalls,
+				wsFuctionName.c_str());
 #else
 	Write(WriteLevel::Info, L"0x%p %4d thread=%x  %s", 
 				instructionPointer,
-				lnFunctionCalls,
+				m_lFunctionCalls,
 				hThread,
 				wsFuctionName.c_str());
 #endif
@@ -963,31 +936,13 @@ HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& c
 	EXIT_FN
 }
 
-#if 0
-DWORD GetStartAddress(HANDLE hProcess, HANDLE hThread)
-{
-	SYMBOL_INFO *pSymbol;
-	pSymbol = (SYMBOL_INFO *)new BYTE[sizeof(SYMBOL_INFO )+MAX_SYM_NAME];
-	pSymbol->SizeOfStruct= sizeof(SYMBOL_INFO);
-	pSymbol->MaxNameLen = MAX_SYM_NAME;
-	SymFromName(hProcess,"wWinMainCRTStartup",pSymbol);
-
-	// Store address, before deleting pointer  
-	DWORD dwAddress = pSymbol->Address;
-
-	delete [](BYTE*)pSymbol; // Valid syntax!
-
-	return dwAddress;
-}
-#endif
-
-HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64* ip, BOOL* bSkip)
+HRESULT DebugEngine::RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64* ip, BOOL* bSkip)
 {
 	ENTER_FN
 
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
-	CallstackEntry csEntry;
+	DWORD64 dwOffsetFromSmybol = 0;
 	std::string sModuleName;
 	bool bModuleFound = FALSE;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
@@ -1024,9 +979,9 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 
 	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", hProcess);
 
-	if (FALSE == bSyminitialized)
+	if (FALSE == m_bSymInitialized)
 	{
-		bSyminitialized = TRUE;
+		m_bSymInitialized = TRUE;
 		BOOL bRes = SymInitialize(hProcess, NULL, TRUE);
 		if (FALSE == bRes)
 		{
@@ -1042,7 +997,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 
 	// We have the IP, search in the cache first before calling API to get the mod name
 	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
-	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
+	for (it = m_mLoadedModules.begin(); it != m_mLoadedModules.end(); ++it)
 	{
 		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
 				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
@@ -1074,7 +1029,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 		{
 			// Add this new found module to the cache
 			sModuleName = module_info_module.ModuleName;
-			mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
+			m_mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
 		}
 	}
 
@@ -1087,6 +1042,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			|| sModuleName.compare("KERNEL32") == 0))
 	{
 		*bSkip = TRUE;
+		//DebugBreak();
 		goto Cleanup;
 	}
 
@@ -1121,8 +1077,6 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			goto Cleanup;
 		}
 
-		csEntry.offset = stack.AddrPC.Offset;
-		csEntry.offsetFromSmybol = 0;
 
 		if (stack.AddrPC.Offset != 0)
 		{
@@ -1136,7 +1090,7 @@ HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& contex
 			// we seem to have a valid PC
 			if (SymGetSymFromAddr64(hProcess,
 										stack.AddrPC.Offset,
-										&(csEntry.offsetFromSmybol),
+										&dwOffsetFromSmybol,
 										pSym) != FALSE)
 			{
 				// Undecorate names:

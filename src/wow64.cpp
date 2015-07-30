@@ -43,12 +43,12 @@
 #define STACKWALK_MAX_NAMELEN 1024
 
 extern bool bSyminitialized;
-extern std::map<std::string, IMAGEHLP_MODULE64> mLoadedModules;
-extern DWORD64 g_dw64StartAddress;
+extern std::map<std::string, IMAGEHLP_MODULE64> m_mLoadedModules;
+extern DWORD64 m_dw64StartAddress;
 extern BYTE m_OriginalInstruction;
 BOOL gbFirst = TRUE;
 
-HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
+HRESULT WowDebugEngine::DumpWowContext(const WOW64_CONTEXT& lcContext)
 {
 	ENTER_FN
 
@@ -65,7 +65,7 @@ HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
 	EXIT_FN
 }
 
-HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD * ip)
+HRESULT WowDebugEngine::RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD * ip)
 {
 	ENTER_FN
 
@@ -102,9 +102,9 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 
 	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", hProcess);
 
-	if (FALSE == bSyminitialized)
+	if (FALSE == m_bSymInitialized)
 	{
-		bSyminitialized = TRUE;
+		m_bSymInitialized = TRUE;
 		BOOL bRes = SymInitialize(hProcess, NULL, TRUE);
 		if (FALSE == bRes)
 		{
@@ -120,7 +120,7 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 
 	// We have the IP, search in the cache first before calling API to get the mod name
 	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
-	for (it = mLoadedModules.begin(); it != mLoadedModules.end(); ++it)
+	for (it = m_mLoadedModules.begin(); it != m_mLoadedModules.end(); ++it)
 	{
 		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
 				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
@@ -156,7 +156,7 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 		{
 			// Add this new found module to the cache
 			sModuleName = module_info_module.ModuleName;
-			mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
+			m_mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
 
 			Write(WriteLevel::Debug, L"SymGetModuleInfo64 ok ataddress %p",
 					(DWORD64)stack.AddrPC.Offset);
@@ -254,7 +254,7 @@ HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEX
 	EXIT_FN
 }
 
-HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
+HRESULT WowDebugEngine::Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
@@ -310,7 +310,7 @@ HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 	EXIT_FN
 }
 
-HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
+HRESULT WowDebugEngine::Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
@@ -345,7 +345,7 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 			SIZE_T lpNumberOfBytesRead;
 			int result = ReadProcessMemory(
 					hProcess,
-					(void*)g_dw64StartAddress,
+					(void*)m_dw64StartAddress,
 					&cInstruction,
 					1,
 					&lpNumberOfBytesRead);
@@ -353,21 +353,21 @@ HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 			if (result == 0)
 			{
 				hr = HRESULT_FROM_WIN32(GetLastError());
-				Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
+				Write(WriteLevel::Error, L"ReadProcessMemory failed to read 0x%p hr=0x%x", m_dw64StartAddress, hr);
 				goto Exit;
 			}
 			if (cInstruction != 0xCC)
 			{
-				Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, g_dw64StartAddress);
+				Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, m_dw64StartAddress);
 
 				m_OriginalInstruction = cInstruction;
 
 				// Replace it with Breakpoint
 				cInstruction = 0xCC;
 
-				WriteProcessMemory(hProcess, (void*)g_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
+				WriteProcessMemory(hProcess, (void*)m_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
 
-				FlushInstructionCache(hProcess, (void*)g_dw64StartAddress, 1);
+				FlushInstructionCache(hProcess, (void*)m_dw64StartAddress, 1);
 			}
 		}
 		else

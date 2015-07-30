@@ -18,13 +18,14 @@ CppSources=..\..\src\Main.cpp  \
 		..\..\src\wow64.cpp    \
 		..\..\src\Output.cpp   \
 		..\..\src\Utils.cpp    \
+		..\..\src\html.cpp    \
 
 HeaderFiles =..\..\src\inc\   \
 
 all: clean $(WtraceBins)
 	echo done!
 
-$(WtraceBins): src\debugger.cpp src\wow64.cpp
+$(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\html.cpp
 	IF NOT EXIST $(BinDir) mkdir $(BinDir)
 	cd $(BinDir)
 	cl /Zi \
@@ -40,6 +41,11 @@ $(WtraceBins): src\debugger.cpp src\wow64.cpp
 		"Dbghelp.lib"
 	cd ..\..
 
+clean:
+	IF EXIST bin\$(TargetPlatform) del /q bin\$(TargetPlatform)\*
+
+####################################################333
+# PUBLISH A NEW VERSION TO LATEST
 publish: latest\$(TargetPlatform) $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
 	copy $(BinDir)\*.exe latest\$(TargetPlatform)
 	copy $(BinDir)\*.pdb latest\$(TargetPlatform)
@@ -48,6 +54,9 @@ publish: latest\$(TargetPlatform) $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(Bi
 	time /t >> latest\$(TargetPlatform)\readme.txt
 	date /t >> latest\$(TargetPlatform)\readme.txt
 
+
+####################################################333
+# TESTS
 testwow: bin\x64\wtrace.exe bin\x86\wtrace.exe bin\x86\wtrace.pdb
 	bin\x64\wtrace.exe -v info -a 3 "bin\x86\wtrace.exe -?"
 
@@ -60,6 +69,6 @@ test: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
 testdebug: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
 	$(BinDir)\wtrace.exe -v debug -a 3 "$(BinDir)\wtrace.exe -?"
 
-clean:
-	IF EXIST bin\$(TargetPlatform) del /q bin\$(TargetPlatform)\*
+
+
 

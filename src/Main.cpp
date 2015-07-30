@@ -111,6 +111,7 @@ int wmain(int argc, wchar_t ** argv)
 
 	gAnalysisLevel = 0;
 	bool fExitProgram = FALSE;
+	DebugEngine engine;
 
 	// Alters state by modifying global variables
 	ParseCommandLine(argc, argv, &fExitProgram);
@@ -120,9 +121,9 @@ int wmain(int argc, wchar_t ** argv)
 		goto Exit;
 	}
 
-	HRESULT hr = Run();
+	HRESULT hr = engine.Run();
 
-	printf("finished. overall result=0x%08x", hr);
+	printf("Finished. Overall result=0x%08x", hr);
 
 Exit:
 	if (gFp)
