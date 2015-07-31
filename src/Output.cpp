@@ -32,6 +32,7 @@ void Interactive()
 
 void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 {
+
 	const WORD colors[] =
 	{
 		//

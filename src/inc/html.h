@@ -1,6 +1,7 @@
 
 class HtmlOutput
 {
+
 public:
 	void AddFunctionCall(std::wstring wsFunctionName);
 

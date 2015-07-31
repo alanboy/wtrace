@@ -18,7 +18,6 @@
 #include "Debugger.h"
 #include "Main.h"
 
-
 #define CMPSTR(X,Y) CompareStringOrdinal(##X##, -1, ##Y##, -1, TRUE) == CSTR_EQUAL
 
 void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
@@ -102,7 +101,7 @@ void Logo(void)
 {
 	// @TODO put date here
 	//http://stackoverflow.com/questions/997946/how-to-get-current-time-and-date-in-c
-	printf("trace 0.1\n(c) 2014 Alan Gonzalez\n\n");
+	printf("trace 0.1\n(c) 2015 Alan Gonzalez\n\n");
 }
 
 int wmain(int argc, wchar_t ** argv)

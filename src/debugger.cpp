@@ -443,15 +443,60 @@ Cleanup:
 	EXIT_FN
 }
 
+
+
+HRESULT DebugEngine::InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address)
+{
+	ENTER_FN;
+
+	BYTE bInstruction;
+	SIZE_T nNumberOfBytesRead;
+
+	int iResult = ReadProcessMemory(
+			hProcess,
+			(void*)dw64Address,
+			&bInstruction,
+			1,
+			&nNumberOfBytesRead);
+
+	if (iResult == 0)
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"Unable to insert breakpoint. ReadProcessMemory failed 0x%x", hr);
+		goto Exit;
+	}
+
+	if (bInstruction == 0xCC)
+	{
+		Write(WriteLevel::Info, L"Insertint a BP where there is alreay a BP instruction");
+		hr = S_OK;
+		goto Exit;
+	}
+
+	Write(WriteLevel::Debug, L"Inserting BP at 0x%08x ", dw64Address);
+
+	m_mBreakpointsOriginalInstruction.insert(
+			std::pair<DWORD64, BYTE>(dw64Address, bInstruction));
+
+	m_bOriginalInstruction = bInstruction;
+
+	// Write new instruction
+	bInstruction = 0xCC;
+	WriteProcessMemory(hProcess, (void*)dw64Address, &bInstruction, 1, &nNumberOfBytesRead);
+	FlushInstructionCache(hProcess, (void*)dw64Address, 1);
+
+	EXIT_FN;
+}
+
 HRESULT DebugEngine::ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
 
+	CONTEXT lcContext = {0};
+
 	//
 	// Wow has its own single step, this is always native 
 	//
-	CONTEXT lcContext = {0};
-
 	if (gAnalysisLevel >= 3)
 	{
 		lcContext.ContextFlags = CONTEXT_ALL;
@@ -581,7 +626,6 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	ENTER_FN
 
 	LPCREATE_PROCESS_DEBUG_INFO pCreateProcessDebugInfo = (LPCREATE_PROCESS_DEBUG_INFO)&de.u.CreateProcessInfo;
-	BYTE cInstruction;
 	HANDLE hProcess = de.u.CreateProcessInfo.hProcess;
 
 	IMAGEHLP_MODULE64 module_info_symbols;
@@ -590,7 +634,6 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	IMAGEHLP_MODULE64 module_info_module;
 	module_info_module.SizeOfStruct = sizeof(module_info_module);
 
-	SIZE_T lpNumberOfBytesRead;
 	LPWSTR processName = new WCHAR[MAX_PATH];
 
 	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
@@ -760,32 +803,7 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 
 	if (bInsertBreakPoint)
 	{
-		// Read the first instruction and save it
-		int result = ReadProcessMemory(
-						hProcess,
-						(void*)m_dw64StartAddress,
-						&cInstruction,
-						1,
-						&lpNumberOfBytesRead);
-
-		if (result == 0)
-		{
-			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"ReadProcessMemory failed 0x%x", hr);
-			goto Exit;
-		}
-
-		if (cInstruction != 0xCC)
-		{
-			Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, m_dw64StartAddress);
-
-			m_bOriginalInstruction = cInstruction;
-
-			// Replace it with Breakpoint
-			cInstruction = 0xCC;
-			WriteProcessMemory(hProcess, (void*)m_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
-			FlushInstructionCache(hProcess, (void*)m_dw64StartAddress, 1);
-		}
+		InsertBreakpoint(hProcess, m_dw64StartAddress);
 	}
 
 	EXIT_FN
@@ -823,39 +841,79 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 
 		GetCurrentFunctionName(hThread, hProcess, lcContext);
 
-		// This does not work when you have a physical DebugBreak() in the code
-		if (m_bOriginalInstruction != 0)
+		if (!m_mBreakpointsOriginalInstruction.empty())
 		{
-			Write(WriteLevel::Debug, L"Writing back original instruction ");
-
-			SIZE_T lNumberOfBytesRead;
 
 #ifdef _X86_
-			lcContext.Eip--;
-			DWORD dwStartAddress;
-			dwStartAddress = lcContext.Eip;
-			WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_bOriginalInstruction, 1, &lNumberOfBytesRead);
-			FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
+			dw64StartAddress = lcContext.Eip - 1;
 #else
-			lcContext.Rip--;
-			dw64StartAddress = lcContext.Rip;
-			WriteProcessMemory(hProcess, (LPVOID)dw64StartAddress, &m_bOriginalInstruction, 1, &lNumberOfBytesRead);
-			FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
+			dw64StartAddress = lcContext.Rip - 1;
 #endif
 
-			m_bOriginalInstruction = 0;
+			auto element = m_mBreakpointsOriginalInstruction.find(dw64StartAddress);
+			if (element != m_mBreakpointsOriginalInstruction.end())
+			{
+				Write(WriteLevel::Info, L"Found a BP that i had set!, %d", element->second);
+				SIZE_T lNumberOfBytesRead;
+
+				// Write back original instruction and remove BP from map
+				WriteProcessMemory(hProcess, (LPVOID)element->first, &element->second, 1, &lNumberOfBytesRead);
+				FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
+
+
+				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+				lcContext.EFlags |= 0x100;
+
+#ifdef _X86_
+				lcContext.Eip--;
+#else
+				lcContext.Rip--;
+#endif
+
+				if (0 == SetThreadContext(hThread, &lcContext))
+				{
+					hr = HRESULT_FROM_WIN32(GetLastError());
+					Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
+					goto Exit;
+				}
+			}
+
 		}
 
-		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-		lcContext.EFlags |= 0x100;
 
-		//A 64-bit application can set the context of a WOW64 thread using the Wow64SetThreadContext function.
-		if (0 == SetThreadContext(hThread, &lcContext))
-		{
-			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
-			goto Exit;
-		}
+//		// This does not work when you have a physical DebugBreak() in the code
+//		if (m_bOriginalInstruction != 0)
+//		{
+//			Write(WriteLevel::Debug, L"Writing back original instruction ");
+//
+//			SIZE_T lNumberOfBytesRead;
+//
+//#ifdef _X86_
+//			lcContext.Eip--;
+//			DWORD dwStartAddress;
+//			dwStartAddress = lcContext.Eip;
+//			WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_bOriginalInstruction, 1, &lNumberOfBytesRead);
+//			FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
+//#else
+//			lcContext.Rip--;
+//			dw64StartAddress = lcContext.Rip;
+//			WriteProcessMemory(hProcess, (LPVOID)dw64StartAddress, &m_bOriginalInstruction, 1, &lNumberOfBytesRead);
+//			FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
+//#endif
+//
+//			m_bOriginalInstruction = 0;
+//		}
+//
+//		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+//		lcContext.EFlags |= 0x100;
+//
+//		//A 64-bit application can set the context of a WOW64 thread using the Wow64SetThreadContext function.
+//		if (0 == SetThreadContext(hThread, &lcContext))
+//		{
+//			hr = HRESULT_FROM_WIN32(GetLastError());
+//			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
+//			goto Exit;
+//		}
 	}
 
 	EXIT_FN

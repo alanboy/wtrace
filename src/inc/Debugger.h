@@ -16,6 +16,7 @@ private:
 	long m_lFunctionCalls = 0;
 	std::map<std::string, IMAGEHLP_MODULE64> m_mLoadedModules;
 	std::string m_sLastFunctionName;
+	std::map<DWORD64, BYTE> m_mBreakpointsOriginalInstruction;
 
 public:
 	HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de);
@@ -25,6 +26,7 @@ public:
 	HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
 	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
+	HRESULT DebugEngine::InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess);
 	HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip, BOOL * bSkip);
 	HRESULT Run();
