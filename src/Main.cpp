@@ -14,8 +14,8 @@
 #include <Strsafe.h>
 
 #include "output.h"
-#include "Utils.h"
 #include "Debugger.h"
+#include "Utils.h"
 #include "Main.h"
 #include "interactive.h"
 
@@ -124,7 +124,7 @@ int wmain(int argc, wchar_t ** argv)
 	gAnalysisLevel = 0;
 	bool fExitProgram = FALSE;
 	DebugEngine engine;
-	InteractiveCommandLine interactive;
+	InteractiveCommandLine interactive(&engine);
 
 	// Alters state by modifying global variables
 	ParseCommandLine(argc, argv, &fExitProgram);

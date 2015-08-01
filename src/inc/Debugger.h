@@ -20,6 +20,12 @@ private:
 	std::string m_sLastFunctionName;
 	std::map<DWORD64, BYTE> m_mBreakpointsOriginalInstruction;
 
+	// Current context & info
+	HANDLE m_hCurrentThread;
+	HANDLE m_hCurrentProcess;
+	CONTEXT m_hCurrentContext;
+
+	// Interactive session
 	InteractiveCommandLine * m_InteractiveSessionObject = nullptr;
 
 	HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de);
@@ -33,6 +39,7 @@ public:
 	HRESULT AddInteractiveSession(InteractiveCommandLine * interactive);
 	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
+	HRESULT GetCurrentCallstack();
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip, BOOL * bSkip);
 	HRESULT StepOver();

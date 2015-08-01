@@ -70,6 +70,8 @@ test: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
 testdebug: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
 	$(BinDir)\wtrace.exe -v debug -a 3 "$(BinDir)\wtrace.exe -?"
 
+testi: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
+	$(BinDir)\wtrace.exe -i -v info -a 3 "$(BinDir)\wtrace.exe -?"
 
 
 

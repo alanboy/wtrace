@@ -135,6 +135,11 @@ HRESULT DebugEngine::Run()
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? L"ExceptionCode = 0x" : L"",
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? de.u.Exception.ExceptionRecord.ExceptionCode : 0);
 
+		// @TODO update with real data, this works with 
+		// only 1 process as this is right now.
+		m_hCurrentThread = pi.hThread;
+		m_hCurrentProcess = pi.hProcess;
+		//m_hCurrentContext = nullptr;
 
 		if (m_InteractiveSessionObject != nullptr)
 		{
@@ -1014,6 +1019,179 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 	EXIT_FN
 }
 
+HRESULT DebugEngine::GetCurrentCallstack()
+{
+	ENTER_FN
+
+	STACKFRAME64 stack = {0};
+	IMAGEHLP_SYMBOL64 *pSym = NULL;
+	bool bModuleFound = FALSE;
+	DWORD64 dwOffsetFromSmybol = 0;
+	std::string sModuleName;
+	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
+
+	int nFramesToRead = 8;
+
+	m_hCurrentContext.ContextFlags = CONTEXT_ALL;
+
+	BOOL bResult = GetThreadContext(m_hCurrentThread, &m_hCurrentContext);
+	if (!bResult)
+	{
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+		goto Exit;
+	}
+
+	DumpContext(m_hCurrentContext);
+
+#ifdef _X86_
+	stack.AddrPC.Offset = m_hCurrentContext.Eip;    // EIP - Instruction Pointer
+	stack.AddrFrame.Offset = m_hCurrentContext.Ebp; // EBP
+	stack.AddrStack.Offset = m_hCurrentContext.Esp; // ESP - Stack Pointer
+#else
+	stack.AddrPC.Offset = m_hCurrentContext.Rip;    // EIP - Instruction Pointer
+	stack.AddrFrame.Offset = m_hCurrentContext.Rbp; // EBP
+	stack.AddrStack.Offset = m_hCurrentContext.Rsp; // ESP - Stack Pointer
+#endif
+
+	stack.AddrPC.Mode = AddrModeFlat;
+	stack.AddrFrame.Mode = AddrModeFlat;
+	stack.AddrStack.Mode = AddrModeFlat;
+
+	pSym = (IMAGEHLP_SYMBOL64*) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+	pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+	pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
+
+	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", m_hCurrentProcess);
+
+	if (FALSE == m_bSymInitialized)
+	{
+		m_bSymInitialized = TRUE;
+		BOOL bRes = SymInitialize(m_hCurrentProcess, NULL, TRUE);
+		if (FALSE == bRes)
+		{
+			DWORD error = GetLastError();
+			if (error != ERROR_SUCCESS)
+			{
+				hr = HRESULT_FROM_WIN32(error);
+				Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
+				goto Cleanup;
+			}
+		}
+	}
+
+//	// We have the IP, search in the cache first before calling API to get the mod name
+//	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
+//	for (it = m_mLoadedModules.begin(); it != m_mLoadedModules.end(); ++it)
+//	{
+//		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
+//				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
+//		{
+//			sModuleName = it->first;
+//			bModuleFound = TRUE;
+//		}
+//	}
+
+	if (!bModuleFound)
+	{
+		// if we got out, this means we havent loaded this module, do it
+		IMAGEHLP_MODULE64 module_info_module;
+		module_info_module.SizeOfStruct = sizeof(module_info_module);
+
+		BOOL bSuccess = SymGetModuleInfo64(
+				m_hCurrentProcess,
+				stack.AddrPC.Offset,
+				&module_info_module);
+
+		if (!bSuccess)
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
+					hr, (DWORD64)stack.AddrPC.Offset);
+			goto Exit;
+		}
+		else
+		{
+			// Add this new found module to the cache
+			sModuleName = module_info_module.ModuleName;
+			m_mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
+		}
+	}
+
+	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
+	{
+		Write(WriteLevel::Debug, L"About to walk the stack hProcess=0x%x hThread=0x%x", m_hCurrentProcess, m_hCurrentThread);
+
+		//
+		// StackWalk64 only needs context when image is IMAGE_FILE_MACHINE_I386, the 
+		// context might be modified.
+		//
+		BOOL bResult = StackWalk64(
+#ifdef _X86_
+				IMAGE_FILE_MACHINE_I386,
+#else
+				IMAGE_FILE_MACHINE_AMD64,
+#endif
+				m_hCurrentProcess,
+				m_hCurrentThread,
+				&stack,
+				(PVOID)(&m_hCurrentContext), // only pass for x86
+				NULL,
+				SymFunctionTableAccess64,
+				SymGetModuleBase64,
+				NULL);
+
+		if (FALSE == bResult)
+		{
+			// StackWalk64 does not set "GetLastError"...
+			// this also might indicate end of stack
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", hr);
+			goto Cleanup;
+		}
+
+		if (stack.AddrPC.Offset == 0)
+		{
+			Write(WriteLevel::Error, L"stack.AddrPC.Offset == 0");
+			goto Exit;
+		}
+
+		// we seem to have a valid PC
+		if (SymGetSymFromAddr64(m_hCurrentProcess,
+									stack.AddrPC.Offset,
+									&dwOffsetFromSmybol,
+									pSym) != FALSE)
+		{
+			std::string sFuntionName;
+			sFuntionName = sModuleName;
+			sFuntionName += "!";
+			sFuntionName += pSym->Name;
+
+			std::wstring wsFuctionName;
+			wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
+
+			Write(WriteLevel::Info, L" %d -> %s", frameNum, wsFuctionName.c_str());
+		}
+		else
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error,
+						L"SymGetSymFromAddr64 failed 0x%x, address=0x%p",
+						hr,
+						stack.AddrPC.Offset);
+			goto Cleanup;
+		}
+	} // for
+
+Cleanup:
+	if (pSym)
+	{
+		delete pSym;
+	}
+
+	EXIT_FN
+}
+
 HRESULT DebugEngine::RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64* ip, BOOL* bSkip)
 {
 	ENTER_FN
@@ -1155,9 +1333,6 @@ HRESULT DebugEngine::RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CO
 			goto Cleanup;
 		}
 
-
-		if (stack.AddrPC.Offset != 0)
-		{
 #if 0
 			if (FALSE == SymRefreshModuleList(hProcess))
 			{
@@ -1165,42 +1340,39 @@ HRESULT DebugEngine::RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CO
 			}
 #endif
 
-			// we seem to have a valid PC
-			if (SymGetSymFromAddr64(hProcess,
-										stack.AddrPC.Offset,
-										&dwOffsetFromSmybol,
-										pSym) != FALSE)
-			{
-				// Undecorate names:
-				//UnDecorateSymbolName(pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY );
-				//UnDecorateSymbolName(pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE );
-
-				if (sFuntionName != NULL)
-				{
-					// Copy into caller
-					*sFuntionName = sModuleName;
-					*sFuntionName += "!";
-					*sFuntionName += pSym->Name;
-				}
-				else
-				{
-					Write(WriteLevel::Error, L"SymGetSymFromAddr64 returned null function name ");
-				}
-			}
-			else
-			{
-				hr = HRESULT_FROM_WIN32(GetLastError());
-				Write(WriteLevel::Error,
-							L"SymGetSymFromAddr64 failed 0x%x, address=0x%p",
-							hr,
-							stack.AddrPC.Offset);
-
-				BREAK_IF_DEBUGGER_PRESENT();
-
-				goto Cleanup;
-			}
+		if (stack.AddrPC.Offset == 0)
+		{
+			goto Exit;
 		}
-	}
+
+		// we seem to have a valid PC
+		if (SymGetSymFromAddr64(hProcess,
+									stack.AddrPC.Offset,
+									&dwOffsetFromSmybol,
+									pSym) != FALSE)
+		{
+			// Undecorate names:
+			// Check pSym->name
+
+			// Copy into caller
+			*sFuntionName = sModuleName;
+			*sFuntionName += "!";
+			*sFuntionName += pSym->Name;
+		}
+		else
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error,
+						L"SymGetSymFromAddr64 failed 0x%x, address=0x%p",
+						hr,
+						stack.AddrPC.Offset);
+
+			BREAK_IF_DEBUGGER_PRESENT();
+
+			goto Cleanup;
+		}
+
+	} // for
 
 Cleanup:
 	if (pSym)
