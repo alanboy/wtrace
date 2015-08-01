@@ -1,10 +1,10 @@
-
 /* ********************************************************** 
  *
  * wtrace
- * 2014 - Alan Gonzalez
+ * 2014 - 2015  Alan Gonzalez
  *
  * ********************************************************** */
+
 #define UNICODE
 #define _UNICODE
 
@@ -17,8 +17,11 @@
 #include "Utils.h"
 #include "Debugger.h"
 #include "Main.h"
+#include "interactive.h"
 
 #define CMPSTR(X,Y) CompareStringOrdinal(##X##, -1, ##Y##, -1, TRUE) == CSTR_EQUAL
+
+BOOL OptionInteractive = FALSE;
 
 void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 {
@@ -67,6 +70,10 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 				gWriteLevelThreshold = WriteLevel::Debug;
 			}
 		}
+		else if (CMPSTR(argv[i], L"-i"))
+		{
+			OptionInteractive = TRUE;
+		}
 		else if (CMPSTR(argv[i], L"-a"))
 		{
 			i++;
@@ -104,6 +111,12 @@ void Logo(void)
 	printf("trace 0.1\n(c) 2015 Alan Gonzalez\n\n");
 }
 
+// type is void (__cdecl *)(void)
+void foobar()
+{
+	
+}
+
 int wmain(int argc, wchar_t ** argv)
 {
 	Logo();
@@ -111,6 +124,7 @@ int wmain(int argc, wchar_t ** argv)
 	gAnalysisLevel = 0;
 	bool fExitProgram = FALSE;
 	DebugEngine engine;
+	InteractiveCommandLine interactive;
 
 	// Alters state by modifying global variables
 	ParseCommandLine(argc, argv, &fExitProgram);
@@ -118,6 +132,13 @@ int wmain(int argc, wchar_t ** argv)
 	if (fExitProgram)
 	{
 		goto Exit;
+	}
+
+	if (OptionInteractive)
+	{
+		// This will cause the engine to call on this
+		// function everytime something happens
+		engine.AddInteractiveSession(&interactive);
 	}
 
 	HRESULT hr = engine.Run();

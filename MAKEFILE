@@ -19,13 +19,14 @@ CppSources=..\..\src\Main.cpp  \
 		..\..\src\Output.cpp   \
 		..\..\src\Utils.cpp    \
 		..\..\src\html.cpp    \
+		..\..\src\interactive.cpp    \
 
 HeaderFiles =..\..\src\inc\   \
 
 all: clean $(WtraceBins)
 	echo done!
 
-$(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\html.cpp
+$(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\html.cpp src\interactive.cpp
 	IF NOT EXIST $(BinDir) mkdir $(BinDir)
 	cd $(BinDir)
 	cl /Zi \

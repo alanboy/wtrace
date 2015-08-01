@@ -1,10 +1,10 @@
-
 /* ********************************************************** 
  *
  * wtrace
- * 2014 - Alan Gonzalez
+ * 2014 - 2015  Alan Gonzalez
  *
  * ********************************************************** */
+
 #define UNICODE
 #define _UNICODE
 
@@ -22,6 +22,7 @@
 #include "Debugger.h"
 #include "wow64.h"
 #include "html.h"
+
 
 DWORD gStartTicks = 0;
 int gAnalysisLevel = 0;
@@ -133,6 +134,12 @@ HRESULT DebugEngine::Run()
 									de.dwDebugEventCode,
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? L"ExceptionCode = 0x" : L"",
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? de.u.Exception.ExceptionRecord.ExceptionCode : 0);
+
+
+		if (m_InteractiveSessionObject != nullptr)
+		{
+			m_InteractiveSessionObject->DebugEvent();
+		}
 
 		switch (de.dwDebugEventCode)
 		{
@@ -370,8 +377,6 @@ HRESULT DebugEngine::ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, c
 			goto Exit;
 		}
 	}
-
-	Interactive();
 
 	EXIT_FN
 }
@@ -809,6 +814,22 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	EXIT_FN
 }
 
+HRESULT DebugEngine::StepOver()
+{
+	ENTER_FN
+
+	EXIT_FN
+}
+
+HRESULT DebugEngine::AddInteractiveSession(InteractiveCommandLine * interactive)
+{
+	ENTER_FN
+
+	m_InteractiveSessionObject = interactive;
+
+	EXIT_FN
+}
+
 HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 {
 	ENTER_FN
@@ -859,7 +880,6 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 				// Write back original instruction and remove BP from map
 				WriteProcessMemory(hProcess, (LPVOID)element->first, &element->second, 1, &lNumberOfBytesRead);
 				FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
-
 
 				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
 				lcContext.EFlags |= 0x100;

@@ -1,12 +1,13 @@
-
 /* ********************************************************** 
  *
  * wtrace
- * 2014 - Alan Gonzalez
+ * 2014 - 2015  Alan Gonzalez
  *
  * ********************************************************** */
+
 #define UNICODE
 #define _UNICODE
+
 #include <windows.h>
 #include <stdio.h>
 #include <string>
@@ -16,19 +17,11 @@
 #include "Main.h"
 #include "output.h"
 
-#include <iostream>
 #include <windows.h>
 
 WriteLevel gWriteLevelThreshold = WriteLevel::Output;
 FILE * gFp;
 int dFunctionDepth = 0;
-
-void Interactive()
-{
-	std::cout << "input>";
-	std::string cmd;
-	std::cin >> cmd;
-}
 
 void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 {
@@ -104,7 +97,7 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 
 			if (level == WriteLevel::Error)
 			{
-				//Interactive();
+
 			}
 		}
 		else

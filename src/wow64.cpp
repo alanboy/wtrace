@@ -1,12 +1,12 @@
 /* ********************************************************** 
  *
  * wtrace
- * 2014 - Alan Gonzalez
+ * 2014 - 2015  Alan Gonzalez
  *
  * ********************************************************** */
+
 #define UNICODE
 #define _UNICODE
-
 
 #include <windows.h>
 #include <stdio.h>

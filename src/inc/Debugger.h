@@ -3,6 +3,8 @@
 #include <map>
 #include <Dbghelp.h>
 
+#include "interactive.h"
+
 class DebugEngine
 {
 private:
@@ -18,17 +20,22 @@ private:
 	std::string m_sLastFunctionName;
 	std::map<DWORD64, BYTE> m_mBreakpointsOriginalInstruction;
 
-public:
+	InteractiveCommandLine * m_InteractiveSessionObject = nullptr;
+
 	HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de);
 	HRESULT DebugStringEvent(const DEBUG_EVENT& de);
+	HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess);
 	HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread,const EXCEPTION_RECORD& exception );
 	HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
 	HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
+
+public:
+	HRESULT AddInteractiveSession(InteractiveCommandLine * interactive);
 	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
-	HRESULT DebugEngine::InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
-	HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess);
+	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip, BOOL * bSkip);
+	HRESULT StepOver();
 	HRESULT Run();
 };
 
