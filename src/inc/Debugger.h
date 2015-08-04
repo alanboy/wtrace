@@ -40,6 +40,7 @@ public:
 	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
 	HRESULT GetCurrentCallstack();
+	HRESULT GetRegisters(std::map<std::string, DWORD> *mapRegisters);
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip, BOOL * bSkip);
 	HRESULT StepOver();

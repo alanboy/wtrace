@@ -39,15 +39,29 @@ HRESULT InteractiveCommandLine::DebugEvent()
 {
 	ENTER_FN
 
-	std::cout << "input>";
-	std::cin >> m_sCurrentCmd;
+	bool bLetGo = false;
+	do {
 
-	Dispatch();
+		std::map<std::string, DWORD> mapRegisters;
+		m_DebugEngine->GetRegisters(&mapRegisters);
+
+#ifdef _X86_
+		std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << std::endl;
+#else
+		std::cout << "rip=0x" << std::hex << mapRegisters.at("rip") << std::endl;
+#endif
+
+		std::cout << "input>";
+
+		std::cin >> m_sCurrentCmd;
+		Dispatch(&bLetGo);
+
+	} while(!bLetGo);
 
 	EXIT_FN
 }
 
-HRESULT InteractiveCommandLine::Dispatch()
+HRESULT InteractiveCommandLine::Dispatch(bool* bLetGo)
 {
 	ENTER_FN
 
@@ -58,11 +72,24 @@ HRESULT InteractiveCommandLine::Dispatch()
 
 	if (m_sCurrentCmd.compare("q") == 0)
 	{
+		*bLetGo = false;
 		goto Exit;
 	}
 	else if (m_sCurrentCmd.compare("kn") == 0)
 	{
 		hr = m_DebugEngine->GetCurrentCallstack();
+		*bLetGo = false;
+		goto Exit;
+	}
+	else if (m_sCurrentCmd.compare("p") == 0)
+	{
+		*bLetGo = true;
+		goto Exit;
+	}
+	else
+	{
+		std::cout << "Unknown command." << std::endl;;
+		*bLetGo = false;
 		goto Exit;
 	}
 

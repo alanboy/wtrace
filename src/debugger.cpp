@@ -77,6 +77,53 @@ HRESULT DumpContext(const CONTEXT& lcContext)
 	EXIT_FN
 }
 
+HRESULT DebugEngine::GetRegisters(
+		std::map<std::string, DWORD> *mapRegisters
+		)
+{
+	ENTER_FN;
+
+	CONTEXT lcContext;
+	DWORD64 dw64StartAddress;
+	lcContext.ContextFlags = CONTEXT_ALL;
+
+	BOOL bResult = GetThreadContext(m_hCurrentThread, &lcContext);
+	if (!bResult)
+	{
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+		goto Exit;
+	}
+
+#define make_pair(X,Y) std::pair<std::string, DWORD>(X, (DWORD)Y) 
+
+#ifdef _X86_
+	mapRegisters->insert(make_pair("eax", lcContext.Eax));
+	mapRegisters->insert(make_pair("ebp", lcContext.Ebp));
+	mapRegisters->insert(make_pair("ebx", lcContext.Ebx));
+	mapRegisters->insert(make_pair("ecx", lcContext.Ecx));
+	mapRegisters->insert(make_pair("edi", lcContext.Edi));
+	mapRegisters->insert(make_pair("edx", lcContext.Edx));
+	mapRegisters->insert(make_pair("eflags" , lcContext.EFlags));
+	mapRegisters->insert(make_pair("eip", lcContext.Eip));
+	mapRegisters->insert(make_pair("esi", lcContext.Esi));
+	mapRegisters->insert(make_pair("esp", lcContext.Esp));
+#else
+	mapRegisters->insert(make_pair("eax" , lcContext.Rax));
+	mapRegisters->insert(make_pair("ebx" , lcContext.Rbx));
+	mapRegisters->insert(make_pair("ecx" , lcContext.Rcx));
+	mapRegisters->insert(make_pair("eflags" , lcContext.EFlags));
+	mapRegisters->insert(make_pair("rbp" , lcContext.Rbp));
+	mapRegisters->insert(make_pair("rdi" , lcContext.Rdi));
+	mapRegisters->insert(make_pair("rdx" , lcContext.Rdx));
+	mapRegisters->insert(make_pair("rip" , lcContext.Rip));
+	mapRegisters->insert(make_pair("rsi" , lcContext.Rsi));
+	mapRegisters->insert(make_pair("rsp" , lcContext.Rsp));
+#endif
+
+	EXIT_FN;
+}
+
 HRESULT DebugEngine::Run()
 {
 	ENTER_FN

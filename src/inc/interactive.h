@@ -9,7 +9,7 @@ private:
 	std::string m_sCurrentCmd;
 	DebugEngine * m_DebugEngine;
 
-	HRESULT Dispatch();
+	HRESULT Dispatch(bool* bContinueExecution);
 
 public:
 	InteractiveCommandLine(DebugEngine * engine);
