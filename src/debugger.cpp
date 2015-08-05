@@ -172,7 +172,7 @@ HRESULT DebugEngine::Run()
 	{
 		WaitForDebugEvent(&de, INFINITE);
 
-		Write(WriteLevel::Debug, L"EXCEPTION_DEBUG_EVENT "
+		Write(WriteLevel::Info, L"EXCEPTION_DEBUG_EVENT "
 									L"(dwProcessId = 0x%08LX"
 									L" dwThreadId = 0x%08LX"
 									L" dwDebugEventCode = 0x%08LX %s %x)",
@@ -188,10 +188,6 @@ HRESULT DebugEngine::Run()
 		m_hCurrentProcess = pi.hProcess;
 		//m_hCurrentContext = nullptr;
 
-		if (m_InteractiveSessionObject != nullptr)
-		{
-			m_InteractiveSessionObject->DebugEvent();
-		}
 
 		switch (de.dwDebugEventCode)
 		{
@@ -359,6 +355,11 @@ HRESULT DebugEngine::Run()
 			 case RIP_EVENT:
 				Write(WriteLevel::Debug, L"RIP_EVENT");
 				break;
+		}
+
+		if (m_InteractiveSessionObject != nullptr)
+		{
+			m_InteractiveSessionObject->DebugEvent();
 		}
 
 		hr = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
@@ -575,16 +576,16 @@ HRESULT DebugEngine::ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 			goto Exit;
 		}
 
-		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-
-		lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-
-		if (0 == SetThreadContext(hThread, &lcContext))
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
-			goto Exit;
-		}
+//		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+//
+//		lcContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+//
+//		if (0 == SetThreadContext(hThread, &lcContext))
+//		{
+//			hr =  HRESULT_FROM_WIN32(GetLastError());
+//			Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
+//			goto Exit;
+//		}
 	}
 
 	EXIT_FN
@@ -866,9 +867,31 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	EXIT_FN
 }
 
-HRESULT DebugEngine::StepOver()
+HRESULT DebugEngine::SetSingleStepFlag()
 {
-	ENTER_FN
+	ENTER_FN;
+
+	CONTEXT lcContext;
+	lcContext.ContextFlags = CONTEXT_ALL;
+
+	// Is m_hCurrentContext available?
+	BOOL bResult = GetThreadContext(m_hCurrentThread, &lcContext);
+	if (!bResult)
+	{
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+		goto Exit;
+	}
+
+	Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+	lcContext.EFlags |= 0x100;
+
+	if (0 == SetThreadContext(m_hCurrentThread, &lcContext))
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"SetThreadContext failed with 0x%x.", hr);
+		goto Exit;
+	}
 
 	EXIT_FN
 }
@@ -933,8 +956,8 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 				WriteProcessMemory(hProcess, (LPVOID)element->first, &element->second, 1, &lNumberOfBytesRead);
 				FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
 
-				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-				lcContext.EFlags |= 0x100;
+//				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+//				lcContext.EFlags |= 0x100;
 
 #ifdef _X86_
 				lcContext.Eip--;

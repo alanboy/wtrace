@@ -83,6 +83,18 @@ HRESULT InteractiveCommandLine::Dispatch(bool* bLetGo)
 	}
 	else if (m_sCurrentCmd.compare("p") == 0)
 	{
+		//hr = m_DebugEngine->StepOver();
+		*bLetGo = true;
+		goto Exit;
+	}
+	else if (m_sCurrentCmd.compare("t") == 0)
+	{
+		hr = m_DebugEngine->SetSingleStepFlag();
+		*bLetGo = true;
+		goto Exit;
+	}
+	else if (m_sCurrentCmd.compare("g") == 0)
+	{
 		*bLetGo = true;
 		goto Exit;
 	}
