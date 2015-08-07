@@ -3,7 +3,9 @@
 #include <map>
 #include <Dbghelp.h>
 
-#include "interactive.h"
+class InteractiveCommandLine;
+class DebugEventCallback;
+
 
 class DebugEngine
 {
@@ -26,7 +28,7 @@ private:
 	CONTEXT m_hCurrentContext;
 
 	// Interactive session
-	InteractiveCommandLine * m_InteractiveSessionObject = nullptr;
+	DebugEventCallback * m_pCallback = nullptr;
 
 	HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de);
 	HRESULT DebugStringEvent(const DEBUG_EVENT& de);
@@ -37,13 +39,14 @@ private:
 
 public:
 	// OTher stuff
-	HRESULT AddInteractiveSession(InteractiveCommandLine * interactive);
+	//HRESULT AddInteractiveSession(InteractiveCommandLine * interactive);
+	HRESULT AddCallback(DebugEventCallback *callback);
 
 	//Debugging the targe
 	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
 	HRESULT GetCurrentCallstack();
-	HRESULT GetRegisters(std::map<std::string, DWORD> *mapRegisters);
+	HRESULT GetRegisters(std::map<std::string, DWORD64> *mapRegisters);
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip, BOOL * bSkip);
 	HRESULT SetSingleStepFlag();

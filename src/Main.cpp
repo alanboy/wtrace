@@ -12,19 +12,51 @@
 #include <stdio.h>
 #include <string>
 #include <Strsafe.h>
+#include <fstream> //for html
 
 #include "output.h"
 #include "Debugger.h"
 #include "Utils.h"
 #include "Main.h"
+
+#include "DebugEventCallback.h"
+#include "html.h"
 #include "interactive.h"
+
+#define WIDE2(x) L##x
+#define WIDE1(x) WIDE2(x)
+#define ENTER_FN \
+			dFunctionDepth++; \
+			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__)); \
+			dFunctionDepth++; \
+			HRESULT hr; \
+			hr = S_OK;
+
+
+#define EXIT_FN \
+			if (0,0) goto Exit; \
+			Exit: \
+			dFunctionDepth--; \
+			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__));\
+			dFunctionDepth--; \
+			return hr;
+
+#define EXIT_FN_NO_RET \
+			if (0,0) goto Exit; \
+			Exit: \
+			dFunctionDepth--; \
+			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__));\
+			dFunctionDepth--; \
 
 #define CMPSTR(X,Y) CompareStringOrdinal(##X##, -1, ##Y##, -1, TRUE) == CSTR_EQUAL
 
 BOOL OptionInteractive = FALSE;
+BOOL OptionHtml = FALSE;
 
 void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 {
+	ENTER_FN;
+
 	*pfExitProgram = FALSE;
 
 	int i = 0;
@@ -74,6 +106,10 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 		{
 			OptionInteractive = TRUE;
 		}
+		else if (CMPSTR(argv[i], L"-html"))
+		{
+			OptionHtml = TRUE;
+		}
 		else if (CMPSTR(argv[i], L"-a"))
 		{
 			i++;
@@ -84,15 +120,13 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 			*pfExitProgram = true;
 			Write(WriteLevel::Output, L"About to call DebugBreak");
 			DebugBreak();
-
 		}
 	}
 
 	// The last argument is the command line to trace
 	gpCommandLine = (argv[argc-1]);
 
-Exit:
-	return;
+	EXIT_FN_NO_RET;
 }
 
 void WtraceUsage(void)
@@ -108,46 +142,55 @@ void Logo(void)
 {
 	// @TODO put date here
 	//http://stackoverflow.com/questions/997946/how-to-get-current-time-and-date-in-c
-	printf("trace 0.1\n(c) 2015 Alan Gonzalez\n\n");
-}
-
-// type is void (__cdecl *)(void)
-void foobar()
-{
-	
+	printf("trace 0.0.0.1\n(c) 2013-2015 Alan Gonzalez\n\n");
 }
 
 int wmain(int argc, wchar_t ** argv)
 {
+	ENTER_FN;
+
 	Logo();
 
 	gAnalysisLevel = 0;
 	bool fExitProgram = FALSE;
+
 	DebugEngine engine;
 	InteractiveCommandLine interactive(&engine);
+	HtmlOutput* htmlOutput = NULL;
 
 	// Alters state by modifying global variables
 	ParseCommandLine(argc, argv, &fExitProgram);
 
 	if (fExitProgram)
 	{
-		goto Exit;
+		goto Cleanup;
 	}
 
+	// Add callbacks, this will cause to call the DebugEvent method
+	// on the passed object on each debug event.
 	if (OptionInteractive)
 	{
-		// This will cause the engine to call on this
-		// function everytime something happens
-		engine.AddInteractiveSession(&interactive);
+		engine.AddCallback(&interactive);
 	}
 
-	HRESULT hr = engine.Run();
+	if (OptionHtml)
+	{
+		htmlOutput = new HtmlOutput(&engine, L"out.html");
+		engine.AddCallback(htmlOutput);
+	}
+
+	hr = engine.Run();
 
 	printf("Finished. Overall result=0x%08x", hr);
 
-Exit:
+Cleanup:
 	if (gFp)
 		fclose(gFp);
+
+	if (htmlOutput)
+		delete htmlOutput;
+
+	EXIT_FN_NO_RET;
 
 	return 0;
 }

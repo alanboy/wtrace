@@ -21,7 +21,9 @@
 #include "Main.h"
 #include "Debugger.h"
 #include "wow64.h"
-#include "html.h"
+
+#include "DebugEventCallback.h"
+#include "interactive.h"
 
 
 DWORD gStartTicks = 0;
@@ -78,13 +80,12 @@ HRESULT DumpContext(const CONTEXT& lcContext)
 }
 
 HRESULT DebugEngine::GetRegisters(
-		std::map<std::string, DWORD> *mapRegisters
+		std::map<std::string, DWORD64> *mapRegisters
 		)
 {
 	ENTER_FN;
 
 	CONTEXT lcContext;
-	DWORD64 dw64StartAddress;
 	lcContext.ContextFlags = CONTEXT_ALL;
 
 	BOOL bResult = GetThreadContext(m_hCurrentThread, &lcContext);
@@ -95,7 +96,7 @@ HRESULT DebugEngine::GetRegisters(
 		goto Exit;
 	}
 
-#define make_pair(X,Y) std::pair<std::string, DWORD>(X, (DWORD)Y) 
+#define make_pair(X,Y) std::pair<std::string, DWORD64>(X, (DWORD64)Y) 
 
 #ifdef _X86_
 	mapRegisters->insert(make_pair("eax", lcContext.Eax));
@@ -137,10 +138,6 @@ HRESULT DebugEngine::Run()
 	m_bSymInitialized = FALSE;
 	m_iSpawnedProcess = 0;
 
-	HtmlOutput html;
-
-	// Ref count of processes created
-
 	memset(&si, 0, sizeof(si));
 	memset(&pi, 0, sizeof(pi));
 
@@ -158,6 +155,7 @@ HRESULT DebugEngine::Run()
 		Write(WriteLevel::Error, L"Unable to create process. hr=0x%x", hr);
 		goto Exit;
 	}
+
 	Write(WriteLevel::Debug, L"CreateProcess OK: "
 									L"(hProcess = 0x%08LX"
 									L" hThread = 0x%08LX"
@@ -165,6 +163,7 @@ HRESULT DebugEngine::Run()
 									pi.hProcess,
 									pi.hThread,
 									pi.dwProcessId);
+
 	m_iSpawnedProcess++;
 
 	int bContinue = TRUE;
@@ -172,7 +171,8 @@ HRESULT DebugEngine::Run()
 	{
 		WaitForDebugEvent(&de, INFINITE);
 
-		Write(WriteLevel::Info, L"EXCEPTION_DEBUG_EVENT "
+		Write( (m_pCallback != nullptr) ? WriteLevel::Debug : WriteLevel::Info,
+									L"EXCEPTION_DEBUG_EVENT "
 									L"(dwProcessId = 0x%08LX"
 									L" dwThreadId = 0x%08LX"
 									L" dwDebugEventCode = 0x%08LX %s %x)",
@@ -187,7 +187,6 @@ HRESULT DebugEngine::Run()
 		m_hCurrentThread = pi.hThread;
 		m_hCurrentProcess = pi.hProcess;
 		//m_hCurrentContext = nullptr;
-
 
 		switch (de.dwDebugEventCode)
 		{
@@ -325,7 +324,7 @@ HRESULT DebugEngine::Run()
 
 			 case EXIT_THREAD_DEBUG_EVENT: 
 			 // Display the thread's exit code. 
-				Write(WriteLevel::Debug, L"EXIT_THREAD_DEBUG_EVENT");
+				Write(WriteLevel::Info, L"EXIT_THREAD_DEBUG_EVENT");
 				break;
 
 			 case EXIT_PROCESS_DEBUG_EVENT: 
@@ -357,9 +356,9 @@ HRESULT DebugEngine::Run()
 				break;
 		}
 
-		if (m_InteractiveSessionObject != nullptr)
+		if (m_pCallback != nullptr)
 		{
-			m_InteractiveSessionObject->DebugEvent();
+			m_pCallback->DebugEvent(de);
 		}
 
 		hr = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
@@ -896,11 +895,11 @@ HRESULT DebugEngine::SetSingleStepFlag()
 	EXIT_FN
 }
 
-HRESULT DebugEngine::AddInteractiveSession(InteractiveCommandLine * interactive)
+HRESULT DebugEngine::AddCallback(DebugEventCallback *callback)
 {
 	ENTER_FN
 
-	m_InteractiveSessionObject = interactive;
+	m_pCallback = callback;
 
 	EXIT_FN
 }
@@ -955,9 +954,6 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 				// Write back original instruction and remove BP from map
 				WriteProcessMemory(hProcess, (LPVOID)element->first, &element->second, 1, &lNumberOfBytesRead);
 				FlushInstructionCache(hProcess, (LPVOID)dw64StartAddress, 1);
-
-//				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-//				lcContext.EFlags |= 0x100;
 
 #ifdef _X86_
 				lcContext.Eip--;

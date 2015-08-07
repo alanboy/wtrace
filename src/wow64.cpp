@@ -400,21 +400,6 @@ HRESULT WowDebugEngine::Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 				}
 			}
 		}
-//
-//		std::string sFuntionName;
-//		std::wstring wsFuctionName;
-//		DWORD64 instructionPointer;
-//		hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 2 /* 1 frame */, &sFuntionName, &instructionPointer);
-//
-//		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
-//		if (FAILED(hr))
-//		{
-//			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-//			goto Exit;
-//		}
-//
-//		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-//		Write(WriteLevel::Info, L"0x%08x %s", (DWORD)instructionPointer, wsFuctionName.c_str());
 
 	}
 

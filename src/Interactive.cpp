@@ -9,6 +9,7 @@
 #include <string>
 #include <windows.h>
 
+#include "DebugEventCallback.h"
 #include "interactive.h"
 #include "output.h"
 #include "Debugger.h"
@@ -35,14 +36,14 @@ InteractiveCommandLine::InteractiveCommandLine(DebugEngine * engine)
 	m_DebugEngine = engine;
 }
 
-HRESULT InteractiveCommandLine::DebugEvent()
+HRESULT InteractiveCommandLine::DebugEvent(const DEBUG_EVENT& event)
 {
 	ENTER_FN
 
 	bool bLetGo = false;
 	do {
 
-		std::map<std::string, DWORD> mapRegisters;
+		std::map<std::string, DWORD64> mapRegisters;
 		m_DebugEngine->GetRegisters(&mapRegisters);
 
 #ifdef _X86_

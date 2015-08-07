@@ -1,9 +1,7 @@
 
-#pragma once
-
 class DebugEngine;
 
-class InteractiveCommandLine
+class InteractiveCommandLine : public DebugEventCallback
 {
 private:
 	std::string m_sCurrentCmd;
@@ -14,6 +12,8 @@ private:
 public:
 	InteractiveCommandLine(DebugEngine * engine);
 
-	HRESULT DebugEvent();
+	void method1(); 
+
+	HRESULT DebugEvent(const DEBUG_EVENT& event);
 };
 

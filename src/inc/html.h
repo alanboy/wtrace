@@ -1,13 +1,27 @@
 
-class HtmlOutput
+class DebugEngine;
+
+
+class HtmlOutput : public DebugEventCallback
 {
 
-public:
-	void AddFunctionCall(std::wstring wsFunctionName);
-
 private:
-	std::wstring wsHtmlBegin = L"<html>";
-	std::wstring wsHtmlEnd = L"<html>";
+	DebugEngine * m_DebugEngine;
+	bool m_bStarted;
+
+	HRESULT Dispatch(bool* bLetGo);
+	HRESULT StartOutput();
+	HRESULT EndOutput();
+	HtmlOutput();
+
+	std::ofstream myfile;
+
+public:
+	HtmlOutput(DebugEngine * engine, std::wstring sOutputFilename);
+
+	HRESULT DebugEvent(const DEBUG_EVENT& event);
+
+	~HtmlOutput();
 
 };
 

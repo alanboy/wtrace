@@ -26,7 +26,7 @@ HeaderFiles =..\..\src\inc\   \
 all: clean $(WtraceBins)
 	echo done!
 
-$(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\html.cpp src\interactive.cpp
+$(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\html.cpp src\interactive.cpp  src\main.cpp
 	IF NOT EXIST $(BinDir) mkdir $(BinDir)
 	cd $(BinDir)
 	cl /Zi \
@@ -65,10 +65,10 @@ testwowdebug: bin\x64\wtrace.exe bin\x86\wtrace.exe bin\x86\wtrace.pdb
 	bin\x64\wtrace.exe -v debug -a 3 "bin\x86\wtrace.exe -?"
 
 test: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
-	$(BinDir)\wtrace.exe -v info -a 3 "$(BinDir)\wtrace.exe -?"
+	$(BinDir)\wtrace.exe -html -v info -a 3 "$(BinDir)\wtrace.exe -?"
 
 testdebug: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
-	$(BinDir)\wtrace.exe -v debug -a 3 "$(BinDir)\wtrace.exe -?"
+	$(BinDir)\wtrace.exe -html -v debug -a 3 "$(BinDir)\wtrace.exe -?"
 
 testi: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
 	$(BinDir)\wtrace.exe -i -v info -a 3 "$(BinDir)\wtrace.exe -?"
