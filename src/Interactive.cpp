@@ -78,7 +78,8 @@ HRESULT InteractiveCommandLine::Dispatch(bool* bLetGo)
 	}
 	else if (m_sCurrentCmd.compare("kn") == 0)
 	{
-		hr = m_DebugEngine->GetCurrentCallstack();
+		std::map<std::string, STACKFRAME64> stack;
+		hr = m_DebugEngine->GetCurrentCallstack(&stack);
 		*bLetGo = false;
 		goto Exit;
 	}

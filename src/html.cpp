@@ -92,6 +92,7 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 	std::map<std::string, DWORD64> mapRegisters;
 
 	m_DebugEngine->GetRegisters(&mapRegisters);
+	std::map<std::string, STACKFRAME64> mapStack;
 
 	myfile << "<tr>"  << std::endl;
 
@@ -120,6 +121,7 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 					case EXCEPTION_SINGLE_STEP:
 						myfile << "<td>EXCEPTION_SINGLE_STEP</td>" << std::endl;
 						hr = m_DebugEngine->SetSingleStepFlag();
+
 					break;
 
 					case DBG_CONTROL_C:
@@ -200,13 +202,20 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 	myfile << "<td>rip=0x" << std::hex << mapRegisters.at("rip") << "</td>" << std::endl;
 #endif
 
-	myfile << "</tr>" ;
-
+	myfile << "<td>" << std::endl;
 	if (event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
-			&& event.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT)
+			&& event.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP)
 	{
+		hr = m_DebugEngine->GetCurrentCallstack(&mapStack);
+
+		auto it = mapStack.begin();
+		myfile << it->first << std::endl;
 //		hr = m_DebugEngine->SetSingleStepFlag();
 	}
+
+	myfile << "</td>" << std::endl;
+	myfile << "</tr>" ;
+
 
 	EXIT_FN;
 }

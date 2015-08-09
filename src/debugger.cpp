@@ -1085,7 +1085,7 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 	EXIT_FN
 }
 
-HRESULT DebugEngine::GetCurrentCallstack()
+HRESULT DebugEngine::GetCurrentCallstack(std::map<std::string, STACKFRAME64> *mapStack)
 {
 	ENTER_FN
 
@@ -1096,7 +1096,7 @@ HRESULT DebugEngine::GetCurrentCallstack()
 	std::string sModuleName;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
 
-	int nFramesToRead = 8;
+	int nFramesToRead = 256;
 
 	m_hCurrentContext.ContextFlags = CONTEXT_ALL;
 
@@ -1236,7 +1236,9 @@ HRESULT DebugEngine::GetCurrentCallstack()
 			std::wstring wsFuctionName;
 			wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
 
-			Write(WriteLevel::Info, L" %d -> %s", frameNum, wsFuctionName.c_str());
+			//Write(WriteLevel::Info, L" %d %s", frameNum, wsFuctionName.c_str());
+			mapStack->insert(std::pair<std::string, STACKFRAME64>(sFuntionName, stack));
+
 		}
 		else
 		{
