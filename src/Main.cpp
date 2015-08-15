@@ -172,11 +172,14 @@ int wmain(int argc, wchar_t ** argv)
 	{
 		engine.AddCallback(&interactive);
 	}
-
-	if (OptionHtml)
+	else if (OptionHtml)
 	{
 		htmlOutput = new HtmlOutput(&engine, L"out.html");
 		engine.AddCallback(htmlOutput);
+	}
+	else
+	{
+		// if not Html-ing or interactive, then just trace
 	}
 
 	hr = engine.Run();
