@@ -1192,8 +1192,8 @@ HRESULT DebugEngine::GetCurrentCallstack(std::map<std::string, STACKFRAME64> *ma
 		{
 			// StackWalk64 does not set "GetLastError"...
 			// this also might indicate end of stack
-			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", hr);
+			//hr = HRESULT_FROM_WIN32(GetLastError());
+			//Write(WriteLevel::Error, L"StackWalk64 failed, the following hr must not be trusted: hr=%x", hr);
 			goto Cleanup;
 		}
 

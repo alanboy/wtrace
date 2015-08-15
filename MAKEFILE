@@ -20,6 +20,7 @@ CppSources=..\..\src\Main.cpp  \
 		..\..\src\Utils.cpp    \
 		..\..\src\plugins\html.cpp    \
 		..\..\src\plugins\interactive.cpp    \
+		..\..\src\plugins\Tracer.cpp    \
 
 HeaderFiles=..\..\src\inc\
 
@@ -29,7 +30,7 @@ PluginHeaderFiles=..\..\src\plugins\
 all: clean $(WtraceBins)
 	echo done!
 
-$(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\plugins\html.cpp src\plugins\interactive.cpp  src\main.cpp
+$(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\plugins\html.cpp src\plugins\interactive.cpp  src\main.cpp src\plugins\tracer.cpp
 	IF NOT EXIST $(BinDir) mkdir $(BinDir)
 	cd $(BinDir)
 	cl /Zi \

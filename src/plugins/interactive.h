@@ -12,8 +12,6 @@ private:
 public:
 	InteractiveCommandLine(DebugEngine * engine);
 
-	void method1(); 
-
 	HRESULT DebugEvent(const DEBUG_EVENT& event);
 };
 

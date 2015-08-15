@@ -18,10 +18,11 @@
 #include "Debugger.h"
 #include "Utils.h"
 #include "Main.h"
-
 #include "DebugEventCallback.h"
-#include "html.h"
-#include "interactive.h"
+
+#include "plugins\html.h"
+#include "plugins\interactive.h"
+#include "plugins\Tracer.h"
 
 BOOL OptionInteractive = FALSE;
 BOOL OptionHtml = FALSE;
@@ -130,6 +131,7 @@ int wmain(int argc, wchar_t ** argv)
 	DebugEngine engine;
 	InteractiveCommandLine interactive(&engine);
 	HtmlOutput* htmlOutput = NULL;
+	TracerPlugin* tracerPlugin = NULL;
 
 	// Alters state by modifying global variables
 	ParseCommandLine(argc, argv, &fExitProgram);
@@ -153,6 +155,8 @@ int wmain(int argc, wchar_t ** argv)
 	else
 	{
 		// if not Html-ing or interactive, then just trace
+		tracerPlugin = new TracerPlugin(&engine);
+		engine.AddCallback(tracerPlugin);
 	}
 
 	hr = engine.Run();
