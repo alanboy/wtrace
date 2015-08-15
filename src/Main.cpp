@@ -23,33 +23,6 @@
 #include "html.h"
 #include "interactive.h"
 
-#define WIDE2(x) L##x
-#define WIDE1(x) WIDE2(x)
-#define ENTER_FN \
-			dFunctionDepth++; \
-			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__)); \
-			dFunctionDepth++; \
-			HRESULT hr; \
-			hr = S_OK;
-
-
-#define EXIT_FN \
-			if (0,0) goto Exit; \
-			Exit: \
-			dFunctionDepth--; \
-			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__));\
-			dFunctionDepth--; \
-			return hr;
-
-#define EXIT_FN_NO_RET \
-			if (0,0) goto Exit; \
-			Exit: \
-			dFunctionDepth--; \
-			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__));\
-			dFunctionDepth--; \
-
-#define CMPSTR(X,Y) CompareStringOrdinal(##X##, -1, ##Y##, -1, TRUE) == CSTR_EQUAL
-
 BOOL OptionInteractive = FALSE;
 BOOL OptionHtml = FALSE;
 

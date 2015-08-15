@@ -30,25 +30,6 @@ DWORD gStartTicks = 0;
 int gAnalysisLevel = 0;
 #define STACKWALK_MAX_NAMELEN 1024
 
-#define WIDE2(x) L##x
-#define WIDE1(x) WIDE2(x)
-#define ENTER_FN \
-			dFunctionDepth++; \
-			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__) L" at %d",  GetTickCount() - gStartTicks); \
-			dFunctionDepth++; \
-			HRESULT hr = S_OK;
-
-
-#define EXIT_FN \
-			if (0,0) goto Exit; \
-			Exit: \
-			dFunctionDepth--; \
-			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__) L" at %d",  GetTickCount() - gStartTicks); \
-			dFunctionDepth--; \
-			return hr;
-
-#define BREAK_IF_DEBUGGER_PRESENT() if (IsDebuggerPresent()) DebugBreak();
-
 HRESULT DumpContext(const CONTEXT& lcContext)
 {
 	ENTER_FN

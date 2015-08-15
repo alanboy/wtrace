@@ -21,25 +21,6 @@
 #include "Debugger.h"
 #include "wow64.h"
 
-#define WIDE2(x) L##x
-#define WIDE1(x) WIDE2(x)
-#define ENTER_FN \
-			dFunctionDepth++; \
-			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__)); \
-			dFunctionDepth++; \
-			HRESULT hr = S_OK;
-
-
-#define EXIT_FN \
-			if (0,0) goto Exit; \
-			Exit: \
-			dFunctionDepth--; \
-			Write(WriteLevel::Debug, L"EXITING  FUNCTION " WIDE1(__FUNCTION__)); \
-			dFunctionDepth--; \
-			return hr;
-
-#define BREAK_IF_DEBUGGER_PRESENT() if (IsDebuggerPresent()) DebugBreak();
-
 #define STACKWALK_MAX_NAMELEN 1024
 
 extern bool bSyminitialized;
