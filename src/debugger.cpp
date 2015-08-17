@@ -350,6 +350,7 @@ HRESULT DebugEngine::Run()
 		}
 	}
 
+	//CloseHandle(de.u.LoadDll.hFile);
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
 
@@ -604,9 +605,9 @@ HRESULT DebugEngine::LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 
 	if (dwBase == 0)
 	{
-	//If the function succeeds, the return value is the base address of the loaded module.
-	//If the function fails, the return value is zero. To retrieve extended error information, call GetLastError.
-	//If the module is already loaded, the return value is zero and GetLastError returns ERROR_SUCCESS.
+		//If the function succeeds, the return value is the base address of the loaded module.
+		//If the function fails, the return value is zero. To retrieve extended error information, call GetLastError.
+		//If the module is already loaded, the return value is zero and GetLastError returns ERROR_SUCCESS.
 		Write(WriteLevel::Debug, L"SymLoadModuleEx returnd 0x%x", dwBase);
 	}
 
@@ -649,12 +650,10 @@ HRESULT DebugEngine::LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess)
 
 	Write(WriteLevel::Info, L" %p \t (%sdebug info) \t %s",
 			de.u.LoadDll.lpBaseOfDll,
-			//de.u.LoadDll.lpBaseOfDll,
 			de.u.LoadDll.nDebugInfoSize == 0 ? L"no " : L"",
 			pszFilename);
 
 Cleanup:
-	CloseHandle(de.u.LoadDll.hFile);
 
 	EXIT_FN
 }
@@ -907,15 +906,15 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	if (m_bfirstDebugEvent)
 	{
 		// First chance: Display the current instruction and register values.
-		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT (first) ignoring...");
+		Write(WriteLevel::Debug, L"EXCEPTION_BREAKPOINT (first) ignoring...");
 		m_bfirstDebugEvent = 0;
 	}
 	else
 //#endif
 	{
-		Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
+		Write(WriteLevel::Debug, L"EXCEPTION_BREAKPOINT");
 
-		GetCurrentFunctionName(hThread, hProcess, lcContext);
+		//GetCurrentFunctionName(hThread, hProcess, lcContext);
 
 		if (!m_mBreakpointsOriginalInstruction.empty())
 		{
@@ -929,7 +928,7 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 			auto element = m_mBreakpointsOriginalInstruction.find(dw64StartAddress);
 			if (element != m_mBreakpointsOriginalInstruction.end())
 			{
-				Write(WriteLevel::Info, L"Found a BP that i had set!, %d", element->second);
+				Write(WriteLevel::Info, L"Found a BP that I set!, %d", element->second);
 				SIZE_T lNumberOfBytesRead;
 
 				// Write back original instruction and remove BP from map
@@ -949,9 +948,7 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 					goto Exit;
 				}
 			}
-
 		}
-
 
 //		// This does not work when you have a physical DebugBreak() in the code
 //		if (m_bOriginalInstruction != 0)
@@ -997,16 +994,10 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 
 	std::string sFuntionName;
 	std::wstring wsFuctionName;
-	DWORD64 instructionPointer;
-	BOOL bSkip = FALSE;
+	std::map<std::string, STACKFRAME64>::iterator it;
+	std::map<std::string, STACKFRAME64> mapStack;
 
-	hr = RetrieveCallstack(hThread, hProcess, context, 1 /* 1 frame */, &sFuntionName, &instructionPointer, &bSkip);
-
-	if (bSkip)
-	{
-		hr = S_OK;
-		goto Exit;
-	}
+	hr = GetCurrentCallstack(&mapStack);
 
 	if (hr == HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND))
 	{
@@ -1020,28 +1011,14 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 	}
 	else if (FAILED(hr))
 	{
-		Write(WriteLevel::Error, L"RetrieveCallstack failed with 0x%x.", hr);
+		Write(WriteLevel::Error, L"GetCurrentCallstack failed with 0x%x.", hr);
 		goto Exit;
-	}
-
-	if (gAnalysisLevel >= 4) // 4 means all code
-	{
-
-	}
-	else // gAnalysisLevel == 3
-	{
-		if (sFuntionName.compare(m_sLastFunctionName) == 0)
-		{
-			goto Exit;
-		}
-		else
-		{
-			m_sLastFunctionName = sFuntionName;
-		}
 	}
 
 	m_lFunctionCalls++;
 
+	it = mapStack.begin();
+	sFuntionName = it->first;
 	wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
 
 	//
@@ -1050,18 +1027,18 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 	//
 	// @TODO print memory contents at that address
 	//
-#ifdef _X86_
-	Write(WriteLevel::Info, L"0x%p %4d %s",
-				(DWORD)instructionPointer,
-				m_lFunctionCalls,
-				wsFuctionName.c_str());
-#else
-	Write(WriteLevel::Info, L"0x%p %4d thread=%x  %s", 
-				instructionPointer,
-				m_lFunctionCalls,
-				hThread,
-				wsFuctionName.c_str());
-#endif
+//#ifdef _X86_
+//	Write(WriteLevel::Info, L"0x%p %4d %s",
+//				(DWORD)instructionPointer,
+//				m_lFunctionCalls,
+//				wsFuctionName.c_str());
+//#else
+//	Write(WriteLevel::Info, L"0x%p %4d thread=%x  %s", 
+//				instructionPointer,
+//				m_lFunctionCalls,
+//				hThread,
+//				wsFuctionName.c_str());
+//#endif
 
 	EXIT_FN
 }
@@ -1261,6 +1238,12 @@ HRESULT DebugEngine::RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CO
 		goto Cleanup;
 	}
 
+
+
+
+
+
+
 #ifdef _X86_
 	stack.AddrPC.Offset = context.Eip;    // EIP - Instruction Pointer
 	stack.AddrFrame.Offset = context.Ebp; // EBP
@@ -1300,17 +1283,17 @@ HRESULT DebugEngine::RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CO
 		}
 	}
 
-	// We have the IP, search in the cache first before calling API to get the mod name
-	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
-	for (it = m_mLoadedModules.begin(); it != m_mLoadedModules.end(); ++it)
-	{
-		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
-				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
-		{
-			sModuleName = it->first;
-			bModuleFound = TRUE;
-		}
-	}
+//	// We have the IP, search in the cache first before calling API to get the mod name
+//	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
+//	for (it = m_mLoadedModules.begin(); it != m_mLoadedModules.end(); ++it)
+//	{
+//		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
+//				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
+//		{
+//			sModuleName = it->first;
+//			bModuleFound = TRUE;
+//		}
+//	}
 
 	if (!bModuleFound)
 	{
@@ -1431,4 +1414,5 @@ Cleanup:
 
 	EXIT_FN
 }
+
 

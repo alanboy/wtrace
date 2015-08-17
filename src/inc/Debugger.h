@@ -19,7 +19,6 @@ private:
 	int m_iSpawnedProcess;
 	long m_lFunctionCalls = 0;
 	std::map<std::string, IMAGEHLP_MODULE64> m_mLoadedModules;
-	std::string m_sLastFunctionName;
 	std::map<DWORD64, BYTE> m_mBreakpointsOriginalInstruction;
 
 	// Current context & info

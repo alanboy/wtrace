@@ -5,6 +5,8 @@ class TracerPlugin : public DebugEventCallback
 {
 private:
 	DebugEngine * m_DebugEngine;
+	size_t nLastCallSize;
+	std::string strLastFunction;
 
 public:
 	TracerPlugin(DebugEngine * engine);

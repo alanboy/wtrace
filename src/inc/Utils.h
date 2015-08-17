@@ -1,5 +1,5 @@
 
-BOOL GetFileNameFromHandle(HANDLE hFile, TCHAR *pszFilename);
+BOOL GetFileNameFromHandle(HANDLE hFile, WCHAR *pszFilename);
 
 
 #define CMPSTR(X,Y) CompareStringOrdinal(##X##, -1, ##Y##, -1, TRUE) == CSTR_EQUAL

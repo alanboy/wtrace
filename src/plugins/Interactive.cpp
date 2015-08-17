@@ -12,7 +12,9 @@
 #include "DebugEventCallback.h"
 #include "interactive.h"
 #include "output.h"
+#include "Utils.h"
 #include "Debugger.h"
+#include "wow64.h"
 
 InteractiveCommandLine::InteractiveCommandLine(DebugEngine * engine)
 {
@@ -24,9 +26,119 @@ HRESULT InteractiveCommandLine::DebugEvent(const DEBUG_EVENT& event)
 	ENTER_FN
 
 	bool bLetGo = false;
-	do {
+	std::map<std::string, DWORD64> mapRegisters;
+	WCHAR pszFilename[MAX_PATH+1];
+	BOOL bSuccess = FALSE;
 
-		std::map<std::string, DWORD64> mapRegisters;
+	switch (event.dwDebugEventCode)
+	{
+		case EXCEPTION_DEBUG_EVENT:
+			switch (event.u.Exception.ExceptionRecord.ExceptionCode)
+			{
+				//////////////////////////////////////////////
+				//			NATIVE EXCEPTIONS
+				//////////////////////////////////////////////
+				case EXCEPTION_ACCESS_VIOLATION:
+				break;
+
+				case EXCEPTION_BREAKPOINT:
+					Write(WriteLevel::Info, L"EXCEPTION_BREAKPOINT");
+				break;
+
+				case EXCEPTION_DATATYPE_MISALIGNMENT: 
+				break;
+
+				case EXCEPTION_SINGLE_STEP:
+				break;
+
+				case DBG_CONTROL_C:
+				break;
+
+				case 0xc000001d:
+				break;
+
+				//////////////////////////////////////////////
+				//				WOW Exceptions
+				//////////////////////////////////////////////
+				case STATUS_WX86_BREAKPOINT:
+				break;
+
+				case STATUS_WX86_SINGLE_STEP:
+				break;
+
+				case STATUS_WX86_UNSIMULATE:
+				break;
+
+				case STATUS_WX86_CONTINUE:
+				break;
+
+				case STATUS_WX86_EXCEPTION_CONTINUE:
+				break;
+
+				case STATUS_WX86_EXCEPTION_LASTCHANCE:
+				break;
+
+				case STATUS_WX86_EXCEPTION_CHAIN:
+				break;
+
+				default:
+				break;
+			}
+
+			break;
+
+		default:
+			break;
+
+		 case CREATE_THREAD_DEBUG_EVENT: 
+				Write(WriteLevel::Info, L"CREATE_THREAD_DEBUG_EVENT");
+				bLetGo = true;
+			break;
+
+		 case CREATE_PROCESS_DEBUG_EVENT: 
+				Write(WriteLevel::Info, L"CREATE_PROCESS_DEBUG_EVENT");
+				bLetGo = true;
+			break;
+
+		 case EXIT_THREAD_DEBUG_EVENT: 
+			break;
+
+		 case EXIT_PROCESS_DEBUG_EVENT: 
+			break;
+
+		 case LOAD_DLL_DEBUG_EVENT:
+
+				bSuccess = GetFileNameFromHandle(event.u.LoadDll.hFile, (WCHAR *)&pszFilename);
+				if (!bSuccess)
+				{
+					Write(WriteLevel::Error, L"GetFileNameFromHandle failed ");
+					goto Exit;
+				}
+
+				Write(WriteLevel::Info, L" %p \t (%sdebug info) \t %s",
+						event.u.LoadDll.lpBaseOfDll,
+						event.u.LoadDll.nDebugInfoSize == 0 ? L"no " : L"",
+						pszFilename);
+
+				bLetGo = true;
+			break;
+
+		 case UNLOAD_DLL_DEBUG_EVENT: 
+			break;
+
+		 case OUTPUT_DEBUG_STRING_EVENT: 
+			break;
+
+		 case RIP_EVENT:
+			break;
+	}
+
+	if (bLetGo)
+	{
+		goto Exit;
+	}
+
+	do {
 		m_DebugEngine->GetRegisters(&mapRegisters);
 
 #ifdef _X86_
@@ -38,6 +150,7 @@ HRESULT InteractiveCommandLine::DebugEvent(const DEBUG_EVENT& event)
 		std::cout << "input>";
 
 		std::cin >> m_sCurrentCmd;
+
 		Dispatch(&bLetGo);
 
 	} while(!bLetGo);
@@ -63,6 +176,15 @@ HRESULT InteractiveCommandLine::Dispatch(bool* bLetGo)
 	{
 		std::map<std::string, STACKFRAME64> stack;
 		hr = m_DebugEngine->GetCurrentCallstack(&stack);
+
+		auto it = stack.begin();
+		int n = 0;
+
+		for (auto it = stack.begin(); it != stack.end(); it++)
+		{
+			std::cout << n++ << " " << it->first << std::endl;
+		}
+
 		*bLetGo = false;
 		goto Exit;
 	}
