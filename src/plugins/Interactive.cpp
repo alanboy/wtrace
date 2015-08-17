@@ -7,6 +7,9 @@
 
 #include <iostream>
 #include <string>
+#include <list>
+#include <map>
+
 #include <windows.h>
 
 #include "DebugEventCallback.h"
@@ -174,15 +177,13 @@ HRESULT InteractiveCommandLine::Dispatch(bool* bLetGo)
 	}
 	else if (m_sCurrentCmd.compare("kn") == 0)
 	{
-		std::map<std::string, STACKFRAME64> stack;
+		std::list<std::string> stack;
 		hr = m_DebugEngine->GetCurrentCallstack(&stack);
 
-		auto it = stack.begin();
 		int n = 0;
-
 		for (auto it = stack.begin(); it != stack.end(); it++)
 		{
-			std::cout << n++ << " " << it->first << std::endl;
+			std::cout << n++ << " " << *it << std::endl;
 		}
 
 		*bLetGo = false;

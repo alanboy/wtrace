@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <map>
+#include <list>
 #include <Dbghelp.h>
 
 class InteractiveCommandLine;
@@ -44,7 +45,7 @@ public:
 	//Debugging the targe
 	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
-	HRESULT GetCurrentCallstack(std::map<std::string, STACKFRAME64> *mapStack);
+	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);
 	HRESULT GetRegisters(std::map<std::string, DWORD64> *mapRegisters);
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT SetSingleStepFlag();

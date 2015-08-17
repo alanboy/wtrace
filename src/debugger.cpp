@@ -15,6 +15,7 @@
 
 #include <iostream>
 #include <map>
+#include <list>
 
 #include "output.h"
 #include "Utils.h"
@@ -998,8 +999,7 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 
 	std::string sFuntionName;
 	std::wstring wsFuctionName;
-	std::map<std::string, STACKFRAME64>::iterator it;
-	std::map<std::string, STACKFRAME64> mapStack;
+	std::list<std::string> mapStack;
 
 	hr = GetCurrentCallstack(&mapStack);
 
@@ -1021,33 +1021,13 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 
 	m_lFunctionCalls++;
 
-	it = mapStack.begin();
-	sFuntionName = it->first;
+	sFuntionName = mapStack.front();
 	wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-
-	//
-	// Note that this instructionPointer is not the last instruction
-	//
-	//
-	// @TODO print memory contents at that address
-	//
-//#ifdef _X86_
-//	Write(WriteLevel::Info, L"0x%p %4d %s",
-//				(DWORD)instructionPointer,
-//				m_lFunctionCalls,
-//				wsFuctionName.c_str());
-//#else
-//	Write(WriteLevel::Info, L"0x%p %4d thread=%x  %s", 
-//				instructionPointer,
-//				m_lFunctionCalls,
-//				hThread,
-//				wsFuctionName.c_str());
-//#endif
 
 	EXIT_FN
 }
 
-HRESULT DebugEngine::GetCurrentCallstack(std::map<std::string, STACKFRAME64> *mapStack)
+HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 {
 	ENTER_FN
 
@@ -1197,9 +1177,9 @@ HRESULT DebugEngine::GetCurrentCallstack(std::map<std::string, STACKFRAME64> *ma
 
 			std::wstring wsFuctionName;
 			wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-			Write(WriteLevel::Info, L" %d %s", frameNum, wsFuctionName.c_str());
+			//Write(WriteLevel::Info, L" %d %s", frameNum, wsFuctionName.c_str());
 
-			mapStack->insert(std::pair<std::string, STACKFRAME64>(sFuntionName, stack));
+			mapStack->push_front(sFuntionName);
 
 		}
 		else
@@ -1221,5 +1201,4 @@ Cleanup:
 
 	EXIT_FN
 }
-
 

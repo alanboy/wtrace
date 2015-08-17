@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <string>
+#include <list>
 #include <windows.h>
 
 #include "DebugEventCallback.h"
@@ -128,14 +129,15 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 			&& event.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP)
 	{
 		m_DebugEngine->GetRegisters(&mapRegisters);
-		std::map<std::string, STACKFRAME64> mapStack;
+
+		std::list<std::string> mapStack;
 		hr = m_DebugEngine->GetCurrentCallstack(&mapStack);
 
-		auto it = mapStack.begin();
+		auto it = mapStack.front();
 
-		if (it->first.compare(strLastFunction) != 0)
+		if (it.compare(strLastFunction) != 0)
 		{
-			strLastFunction = it->first;
+			strLastFunction = it;
 
 #ifdef _X86_
 			std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
@@ -150,18 +152,8 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 
 			for (auto it = mapStack.begin(); it != mapStack.end(); it++)
 			{
-				std::cout << it->first << " -> ";
+				std::cout << *it << " -> ";
 			}
-
-//			// Show all stack
-//			it = mapStack.end();
-//				it--;
-//			while (true)
-//			{
-//				std::cout << it->first << " -> ";
-//				it--;
-//				if (it == mapStack.begin()) break;
-//			}
 
 			std::cout  << std::endl;
 

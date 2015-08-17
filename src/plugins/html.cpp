@@ -7,9 +7,10 @@
 #include <string>
 #include <iostream>
 #include <fstream> //for html
-#include <windows.h>
 #include <map>
+#include <list>
 
+#include <windows.h>
 #include <Dbghelp.h>
 #include "wow64.h"
 
@@ -68,7 +69,7 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 	std::map<std::string, DWORD64> mapRegisters;
 
 	m_DebugEngine->GetRegisters(&mapRegisters);
-	std::map<std::string, STACKFRAME64> mapStack;
+	std::list<std::string> mapStack;
 
 	myfile << "<tr>"  << std::endl;
 
@@ -184,8 +185,8 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 	{
 		hr = m_DebugEngine->GetCurrentCallstack(&mapStack);
 
-		auto it = mapStack.begin();
-		myfile << it->first << std::endl;
+		auto it = mapStack.front();
+		myfile << it << std::endl;
 //		hr = m_DebugEngine->SetSingleStepFlag();
 	}
 
