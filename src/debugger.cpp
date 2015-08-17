@@ -350,7 +350,11 @@ HRESULT DebugEngine::Run()
 		}
 	}
 
-	//CloseHandle(de.u.LoadDll.hFile);
+	if (de.u.LoadDll.hFile)
+	{
+		CloseHandle(de.u.LoadDll.hFile);
+	}
+
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
 
