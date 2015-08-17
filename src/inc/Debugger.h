@@ -47,7 +47,6 @@ public:
 	HRESULT GetCurrentCallstack(std::map<std::string, STACKFRAME64> *mapStack);
 	HRESULT GetRegisters(std::map<std::string, DWORD64> *mapRegisters);
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
-	HRESULT RetrieveCallstack(HANDLE hThread, HANDLE hProcess, const CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD64 * ip, BOOL * bSkip);
 	HRESULT SetSingleStepFlag();
 	HRESULT Run();
 };
