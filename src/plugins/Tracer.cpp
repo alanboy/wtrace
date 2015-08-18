@@ -152,9 +152,10 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 
 			for (auto it = mapStack.begin(); it != mapStack.end(); it++)
 			{
-				std::cout << *it << " -> ";
+				std::cout << "  ";
 			}
 
+			std::cout << mapStack.back() << "()";
 			std::cout  << std::endl;
 
 			//		hr = m_DebugEngine->SetSingleStepFlag();

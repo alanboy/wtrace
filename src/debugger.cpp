@@ -555,12 +555,12 @@ HRESULT DebugEngine::ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 
 		DumpContext(lcContext);
 
-		hr = GetCurrentFunctionName(hThread, hProcess, lcContext);
-		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
-		if (FAILED(hr))
-		{
-			goto Exit;
-		}
+//		hr = GetCurrentFunctionName(hThread, hProcess, lcContext);
+//		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
+//		if (FAILED(hr))
+//		{
+//			goto Exit;
+//		}
 
 //		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
 //
