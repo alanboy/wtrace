@@ -1,3 +1,9 @@
+/* ********************************************************** 
+ *
+ * wtrace
+ * 2014 - 2015  Alan Gonzalez
+ *
+ * ********************************************************** */
 
 #include <iostream>
 #include <map>
@@ -7,7 +13,9 @@
 class InteractiveCommandLine;
 class DebugEventCallback;
 
-
+//
+// Public interface for debugging engine
+//
 class DebugEngine
 {
 private:
@@ -39,10 +47,9 @@ private:
 
 public:
 	// OTher stuff
-	//HRESULT AddInteractiveSession(InteractiveCommandLine * interactive);
 	HRESULT AddCallback(DebugEventCallback *callback);
 
-	//Debugging the targe
+	//Debugging the target
 	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
 	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);

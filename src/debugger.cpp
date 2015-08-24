@@ -20,12 +20,13 @@
 #include "output.h"
 #include "Utils.h"
 #include "Main.h"
-#include "Debugger.h"
+
+// Debugging engines
+#include "DebugEngine.h"
+#include "NativeDebugEngine.h"
 #include "wow64.h"
 
 #include "DebugEventCallback.h"
-#include "interactive.h"
-
 
 DWORD gStartTicks = 0;
 int gAnalysisLevel = 0;

@@ -16,7 +16,8 @@
 #include "interactive.h"
 #include "output.h"
 #include "Utils.h"
-#include "Debugger.h"
+#include "DebugEngine.h"
+#include "NativeDebugEngine.h"
 #include "wow64.h"
 
 InteractiveCommandLine::InteractiveCommandLine(DebugEngine * engine)

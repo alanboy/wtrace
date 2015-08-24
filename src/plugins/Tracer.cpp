@@ -13,7 +13,8 @@
 #include "DebugEventCallback.h"
 #include "Tracer.h"
 #include "output.h"
-#include "Debugger.h"
+
+#include "DebugEngine.h"
 #include "wow64.h"
 
 TracerPlugin::TracerPlugin(DebugEngine * engine)

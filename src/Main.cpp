@@ -15,9 +15,10 @@
 #include <fstream> //for html
 
 #include "output.h"
-#include "Debugger.h"
 #include "Utils.h"
 #include "Main.h"
+
+#include "DebugEngine.h"
 #include "DebugEventCallback.h"
 
 #include "plugins\html.h"

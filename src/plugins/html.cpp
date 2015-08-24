@@ -12,12 +12,12 @@
 
 #include <windows.h>
 #include <Dbghelp.h>
-#include "wow64.h"
 
 #include "output.h"
-#include "Debugger.h"
 
+#include "DebugEngine.h"
 #include "DebugEventCallback.h"
+
 #include "html.h"
 
 HtmlOutput::~HtmlOutput()
@@ -107,7 +107,7 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 					case 0xc000001d:
 					break;
 
-					//////////////////////////////////////////////
+/*					//////////////////////////////////////////////
 					//				WOW Exceptions
 					//////////////////////////////////////////////
 					case STATUS_WX86_BREAKPOINT:
@@ -131,8 +131,10 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 					case STATUS_WX86_EXCEPTION_CHAIN:
 					break;
 
+					*/
 					default:
 					break;
+
 				}
 
 				break;

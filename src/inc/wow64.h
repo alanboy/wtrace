@@ -1,5 +1,20 @@
+/* ********************************************************** 
+ *
+ * wtrace
+ * 2014 - 2015  Alan Gonzalez
+ *
+ * ********************************************************** */
 
-class WowDebugEngine
+#include <iostream>
+#include <map>
+#include <list>
+#include <Dbghelp.h>
+
+//
+// WoWDebugEngine for handling Windows on Windows processes.
+// * x86 on amd64
+//
+class WowDebugEngine : public DebugEngine
 {
 private:
 	bool 			m_bSymInitialized;
@@ -9,7 +24,7 @@ private:
 	std::map<std::string, IMAGEHLP_MODULE64>	m_mLoadedModules;
 
 public:
-	HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext);
+	//HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext);
 	HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread);
 	HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread);
 	HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD * ip);
