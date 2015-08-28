@@ -23,15 +23,32 @@
 
 // Debugging engines
 #include "DebugEngine.h"
+#include "ArchitectureSpecificInterface.h"
 #include "NativeDebugEngine.h"
 #include "wow64.h"
 
 #define STACKWALK_MAX_NAMELEN 1024
 
+HRESULT WowDebugEngine::DumpContext()
+{
+	ENTER_FN;
+
+	WOW64_CONTEXT lcContext;
+	Write(WriteLevel::Debug,  L"eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X",
+			lcContext.Eax, lcContext.Ebx, lcContext.Ecx,
+			lcContext.Edx, lcContext.Esi, lcContext.Edi);
+
+	Write(WriteLevel::Debug,  L"eip=%08X esp=%08X ebp=%08X",
+			lcContext.Eip, lcContext.Esp, lcContext.Ebp);
+
+	Write(WriteLevel::Debug, L"eflags = %08X",
+			lcContext.EFlags);
+
+	EXIT_FN
+}
 HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
 {
 	ENTER_FN
-
 
 	Write(WriteLevel::Debug,  L"eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X",
 			lcContext.Eax, lcContext.Ebx, lcContext.Ecx,

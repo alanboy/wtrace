@@ -16,6 +16,7 @@
 #include "interactive.h"
 #include "output.h"
 #include "Utils.h"
+#include "ArchitectureSpecificInterface.h"
 #include "DebugEngine.h"
 #include "NativeDebugEngine.h"
 #include "wow64.h"

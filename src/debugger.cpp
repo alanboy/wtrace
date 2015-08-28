@@ -23,6 +23,7 @@
 
 // Debugging engines
 #include "DebugEngine.h"
+#include "ArchitectureSpecificInterface.h"
 #include "NativeDebugEngine.h"
 #include "wow64.h"
 
@@ -116,7 +117,10 @@ HRESULT DebugEngine::Run()
 	int bCreateProcRes;
 	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
+
+	// Architecture specific will be handled by these two:
 	WowDebugEngine wow64engine;
+	//NativeDebugEngine nativeEngine;
 
 	m_bSymInitialized = FALSE;
 	m_iSpawnedProcess = 0;

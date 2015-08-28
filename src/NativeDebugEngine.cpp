@@ -5,6 +5,9 @@
  *
  * ********************************************************** */
 
+#define UNICODE
+#define _UNICODE
+
 #include <windows.h>
 #include <stdio.h>
 #include <string>
@@ -20,16 +23,18 @@
 
 // Debugging engines
 #include "DebugEngine.h"
+#include "ArchitectureSpecificInterface.h"
 #include "NativeDebugEngine.h"
 #include "wow64.h"
 
 #include "DebugEventCallback.h"
 #include "interactive.h"
 
-
-HRESULT NativeDebugEngine::DumpContext(const CONTEXT& lcContext)
+HRESULT NativeDebugEngine::DumpContext()
 {
 	ENTER_FN
+
+	CONTEXT lcContext;
 
 #ifdef _X86_
 	Write(WriteLevel::Debug,  L"eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X",

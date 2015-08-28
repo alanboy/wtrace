@@ -14,7 +14,8 @@
 // WoWDebugEngine for handling Windows on Windows processes.
 // * x86 on amd64
 //
-class WowDebugEngine : public DebugEngine
+// Implements ArchictectureSpecificInterface and Extends DebugEngine
+class WowDebugEngine : public ArchictectureSpecificInterface
 {
 private:
 	bool 			m_bSymInitialized;
@@ -28,6 +29,7 @@ public:
 	HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread);
 	HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread);
 	HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD * ip);
+	HRESULT DumpContext();
 
 	void SetStartAddress(DWORD64 dw64StartAdd)
 	{

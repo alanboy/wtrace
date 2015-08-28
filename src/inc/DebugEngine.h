@@ -10,7 +10,6 @@
 #include <list>
 #include <Dbghelp.h>
 
-class InteractiveCommandLine;
 class DebugEventCallback;
 
 //
@@ -35,7 +34,6 @@ private:
 	HANDLE m_hCurrentProcess;
 	CONTEXT m_hCurrentContext;
 
-	// Interactive session
 	DebugEventCallback * m_pCallback = nullptr;
 
 	HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de);
