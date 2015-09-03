@@ -11,6 +11,8 @@
 #include <Dbghelp.h>
 
 class DebugEventCallback;
+class WowDebugEngine;
+class NativeDebugEngine;
 
 //
 // Public interface for debugging engine
@@ -21,7 +23,6 @@ private:
 	BYTE m_bOriginalInstruction;
 	DWORD m_dwProcessNameLen;
 	DWORD64 m_dw64StartAddress = 0;
-	bool m_bSymInitialized;
 	bool m_bfirstDebugEvent = 1;
 	int m_iAnalysisLevel;
 	int m_iSpawnedProcess;
@@ -29,10 +30,16 @@ private:
 	std::map<std::string, IMAGEHLP_MODULE64> m_mLoadedModules;
 	std::map<DWORD64, BYTE> m_mBreakpointsOriginalInstruction;
 
-	// Current context & info
+protected:
+	bool m_bSymInitialized;
 	HANDLE m_hCurrentThread;
 	HANDLE m_hCurrentProcess;
 	CONTEXT m_hCurrentContext;
+	WOW64_CONTEXT m_hCurrentWoWContext;
+
+private: 
+	WowDebugEngine *wow64engine;
+	NativeDebugEngine *nativeEngine;
 
 	DebugEventCallback * m_pCallback = nullptr;
 
@@ -41,20 +48,21 @@ private:
 	HRESULT LoadDllDebugEvent(const DEBUG_EVENT& de, HANDLE hProcess);
 	HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread,const EXCEPTION_RECORD& exception );
 	HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
-	HRESULT ExceptionSingleStep(HANDLE hProcess, HANDLE hThread);
+	HRESULT ExceptionSingleStep();
 
 public:
 	// OTher stuff
 	HRESULT AddCallback(DebugEventCallback *callback);
 
 	//Debugging the target
-	HRESULT GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context);
+	HRESULT GetCurrentFunctionName(const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
 	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);
 	HRESULT GetRegisters(std::map<std::string, DWORD64> *mapRegisters);
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT SetSingleStepFlag();
 	HRESULT Run();
+	HRESULT IsWowProcess(bool *bIsWow);
 };
 
 

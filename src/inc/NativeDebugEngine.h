@@ -13,8 +13,12 @@
 // Implements ArchictectureSpecificInterface and Extends DebugEngine
 class NativeDebugEngine : public ArchictectureSpecificInterface
 {
+private:
+	std::map<std::string, IMAGEHLP_MODULE64> m_mLoadedModules;
+
 public:
 	HRESULT DumpContext();
+	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);
 };
 
 

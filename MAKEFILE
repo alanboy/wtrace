@@ -16,6 +16,7 @@ WtraceBins=bin\$(TargetPlatform)\wtrace.exe
 CppSources=..\..\src\Main.cpp  \
 		..\..\src\debugger.cpp \
 		..\..\src\wow64.cpp    \
+		..\..\src\nativedebugengine.cpp    \
 		..\..\src\Output.cpp   \
 		..\..\src\Utils.cpp    \
 		..\..\src\plugins\html.cpp    \

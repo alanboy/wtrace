@@ -30,6 +30,8 @@
 #include "DebugEventCallback.h"
 #include "interactive.h"
 
+#define STACKWALK_MAX_NAMELEN 1024
+
 HRESULT NativeDebugEngine::DumpContext()
 {
 	ENTER_FN
@@ -62,4 +64,11 @@ HRESULT NativeDebugEngine::DumpContext()
 	EXIT_FN
 }
 
+HRESULT NativeDebugEngine::GetCurrentCallstack(
+		std::list<std::string> *mapStack
+		)
+{
 
+	ENTER_FN
+	EXIT_FN
+}

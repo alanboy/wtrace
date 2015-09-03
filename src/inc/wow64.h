@@ -15,7 +15,7 @@
 // * x86 on amd64
 //
 // Implements ArchictectureSpecificInterface and Extends DebugEngine
-class WowDebugEngine : public ArchictectureSpecificInterface
+class WowDebugEngine : public DebugEngine
 {
 private:
 	bool 			m_bSymInitialized;
@@ -24,17 +24,13 @@ private:
 	BOOL			gbFirst = TRUE;
 	std::map<std::string, IMAGEHLP_MODULE64>	m_mLoadedModules;
 
+	WOW64_CONTEXT m_hCurrentContext;
+
 public:
-	//HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext);
 	HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread);
 	HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread);
-	HRESULT RetrieveWoWCallstack(HANDLE hThread, HANDLE hProcess, const WOW64_CONTEXT& context, int nFramesToRead, std::string* sFuntionName, DWORD * ip);
-	HRESULT DumpContext();
+	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);
 
-	void SetStartAddress(DWORD64 dw64StartAdd)
-	{
-		m_dw64StartAddress = dw64StartAdd;
-	}
 };
 
 

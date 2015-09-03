@@ -187,9 +187,12 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 	{
 		hr = m_DebugEngine->GetCurrentCallstack(&mapStack);
 
-		auto it = mapStack.front();
-		myfile << it << std::endl;
-//		hr = m_DebugEngine->SetSingleStepFlag();
+		if (!FAILED(hr) && !mapStack.empty())
+		{
+			auto it = mapStack.front();
+			myfile << it << std::endl;
+	//		hr = m_DebugEngine->SetSingleStepFlag();
+		}
 	}
 
 	myfile << "</td>" << std::endl;

@@ -61,7 +61,7 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 			if (level == WriteLevel::Error)
 			{
 				SetConsoleTextAttribute(hstdout, colors[0]);
-				printf(" + ");
+				printf(">> ");
 			}
 			else if ((level == WriteLevel::Info) && (gWriteLevelThreshold == WriteLevel::Debug))
 			{

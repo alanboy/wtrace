@@ -119,8 +119,8 @@ HRESULT DebugEngine::Run()
 	PROCESS_INFORMATION pi;
 
 	// Architecture specific will be handled by these two:
-	WowDebugEngine wow64engine;
-	//NativeDebugEngine nativeEngine;
+	wow64engine = new WowDebugEngine ;
+	//nativeEngine = new NativeDebugEngine ;
 
 	m_bSymInitialized = FALSE;
 	m_iSpawnedProcess = 0;
@@ -162,9 +162,11 @@ HRESULT DebugEngine::Run()
 									L"EXCEPTION_DEBUG_EVENT "
 									L"(dwProcessId = 0x%08LX"
 									L" dwThreadId = 0x%08LX"
+									L" hThread = 0x%08LX"
 									L" dwDebugEventCode = 0x%08LX %s %x)",
 									de.dwProcessId,
 									de.dwThreadId,
+									pi.hThread,
 									de.dwDebugEventCode,
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? L"ExceptionCode = 0x" : L"",
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? de.u.Exception.ExceptionRecord.ExceptionCode : 0);
@@ -201,7 +203,7 @@ HRESULT DebugEngine::Run()
 					break;
 
 					case EXCEPTION_SINGLE_STEP:
-						hr = ExceptionSingleStep(pi.hProcess, pi.hThread);
+						hr = ExceptionSingleStep();
 						if (FAILED(hr))
 						{
 							goto Exit;
@@ -223,14 +225,15 @@ HRESULT DebugEngine::Run()
 					//				WOW Exceptions
 					//////////////////////////////////////////////
 					case STATUS_WX86_BREAKPOINT:
-						wow64engine.SetStartAddress(m_dw64StartAddress);
-						wow64engine.Wow64Breakpoint(pi.hProcess, pi.hThread);
+						Write(WriteLevel::Info, L"STATUS_WX86_BREAKPOINT");
+						//wow64engine->SetStartAddress(m_dw64StartAddress);
+						wow64engine->Wow64Breakpoint(pi.hProcess, pi.hThread);
 					break;
 
 					case STATUS_WX86_SINGLE_STEP:
 						// 0x4000001EL
 						// http://reverseengineering.stackexchange.com/questions/9313/opening-program-via-ollydbg-immunity-in-win7-causes-exception-unless-in-xp-compa
-						hr = wow64engine.Wow64SingleStep(pi.hProcess, pi.hThread);
+						hr = wow64engine->Wow64SingleStep(pi.hProcess, pi.hThread);
 						if (FAILED(hr))
 						{
 							goto Exit;
@@ -371,6 +374,33 @@ HRESULT DebugEngine::Run()
 	EXIT_FN
 }
 
+HRESULT DebugEngine::IsWowProcess(bool *bIsWow)
+{
+	ENTER_FN
+
+	typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
+	LPFN_ISWOW64PROCESS fnIsWow64Process;
+	BOOL bIsWow64 = FALSE;
+
+	fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
+			GetModuleHandle(TEXT("kernel32")),"IsWow64Process");
+
+	if (NULL != fnIsWow64Process)
+	{
+		if (!fnIsWow64Process(m_hCurrentProcess, &bIsWow64))
+		{
+			hr =  HRESULT_FROM_WIN32(GetLastError());
+			goto Exit;
+		}
+	}
+
+	Write(WriteLevel::Debug, L"Process is WoW64: %d", bIsWow64);
+
+	*bIsWow = !!bIsWow64;
+
+	EXIT_FN
+}
+
 HRESULT DebugEngine::ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTION_RECORD& exception)
 {
 	ENTER_FN
@@ -414,7 +444,7 @@ HRESULT DebugEngine::ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, c
 
 		DumpContext(lcContext);
 
-		hr = GetCurrentFunctionName(hThread, hProcess, lcContext);
+		hr = GetCurrentFunctionName(lcContext);
 		if (FAILED(hr))
 		{
 			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
@@ -537,7 +567,7 @@ HRESULT DebugEngine::InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address)
 	EXIT_FN;
 }
 
-HRESULT DebugEngine::ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
+HRESULT DebugEngine::ExceptionSingleStep()
 {
 	ENTER_FN
 
@@ -550,7 +580,7 @@ HRESULT DebugEngine::ExceptionSingleStep(HANDLE hProcess, HANDLE hThread)
 	{
 		lcContext.ContextFlags = CONTEXT_ALL;
 
-		BOOL bResult = GetThreadContext(hThread, &lcContext);
+		BOOL bResult = GetThreadContext(m_hCurrentThread, &lcContext);
 		if (!bResult)
 		{
 			hr = HRESULT_FROM_WIN32(GetLastError());
@@ -775,7 +805,7 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		goto Exit;
 	}
 
-	BREAK_IF_DEBUGGER_PRESENT();
+	//BREAK_IF_DEBUGGER_PRESENT();
 
 	//
 	// Retrieves the module information of the specified module.
@@ -869,6 +899,7 @@ HRESULT DebugEngine::SetSingleStepFlag()
 	{
 		hr =  HRESULT_FROM_WIN32(GetLastError());
 		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+		FATAL_ERROR(hr);
 		goto Exit;
 	}
 
@@ -894,12 +925,15 @@ HRESULT DebugEngine::AddCallback(DebugEventCallback *callback)
 	EXIT_FN
 }
 
+// this must handle wow
 HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 {
 	ENTER_FN
 
 	CONTEXT lcContext;
+	WOW64_CONTEXT lcWowContext = {0};
 	DWORD64 dw64StartAddress;
+
 	lcContext.ContextFlags = CONTEXT_ALL;
 
 	BOOL bResult = GetThreadContext(hThread, &lcContext);
@@ -907,10 +941,9 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	{
 		hr =  HRESULT_FROM_WIN32(GetLastError());
 		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+		FATAL_ERROR(hr);
 		goto Exit;
 	}
-
-	DumpContext(lcContext);
 
 //#ifdef _X86_
 	if (m_bfirstDebugEvent)
@@ -998,7 +1031,7 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	EXIT_FN
 }
 
-HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, const CONTEXT& context)
+HRESULT DebugEngine::GetCurrentFunctionName(const CONTEXT& context)
 {
 	ENTER_FN
 
@@ -1032,39 +1065,76 @@ HRESULT DebugEngine::GetCurrentFunctionName(HANDLE hThread, HANDLE hProcess, con
 	EXIT_FN
 }
 
+// Cases to consider:
+//
+//	OS				amd64	amd64	amd64	x86
+//	wtrace			amd64	amd64	x86		x86
+//	target			amd64	x86		x86		x86
+//
 HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 {
 	ENTER_FN
+
+#ifdef _X86_
+	bool bIsWtraceX86 = true;
+#else
+	bool bIsWtraceX86 = false;
+#endif
+
+	bool bIsWow;
 
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	bool bModuleFound = FALSE;
 	DWORD64 dwOffsetFromSmybol = 0;
+	BOOL bResult = FALSE;
 	std::string sModuleName;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
-
 	int nFramesToRead = 256;
 
-	m_hCurrentContext.ContextFlags = CONTEXT_ALL;
+	DebugEngine::IsWowProcess(&bIsWow);
 
-	BOOL bResult = GetThreadContext(m_hCurrentThread, &m_hCurrentContext);
-	if (!bResult)
+	if (bIsWow)
 	{
-		hr =  HRESULT_FROM_WIN32(GetLastError());
-		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
-		goto Exit;
+		Write(WriteLevel::Debug, L"Process is WoW");
 	}
 
-	DumpContext(m_hCurrentContext);
+	if (bIsWow && !bIsWtraceX86)
+	{
+		m_hCurrentWoWContext.ContextFlags = CONTEXT_ALL;
+		bResult = Wow64GetThreadContext(m_hCurrentThread, &m_hCurrentWoWContext);
+	}
+	else
+	{
+		m_hCurrentContext.ContextFlags = CONTEXT_ALL;
+		bResult = GetThreadContext(m_hCurrentThread, &m_hCurrentContext);
+	}
+
+	if (!bResult)
+	{
+		hr = HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+		FATAL_ERROR(hr);
+		goto Exit;
+	}
 
 #ifdef _X86_
 	stack.AddrPC.Offset = m_hCurrentContext.Eip;    // EIP - Instruction Pointer
 	stack.AddrFrame.Offset = m_hCurrentContext.Ebp; // EBP
 	stack.AddrStack.Offset = m_hCurrentContext.Esp; // ESP - Stack Pointer
 #else
-	stack.AddrPC.Offset = m_hCurrentContext.Rip;    // EIP - Instruction Pointer
-	stack.AddrFrame.Offset = m_hCurrentContext.Rbp; // EBP
-	stack.AddrStack.Offset = m_hCurrentContext.Rsp; // ESP - Stack Pointer
+	if (bIsWow && !bIsWtraceX86)
+	{
+		stack.AddrPC.Offset = m_hCurrentWoWContext.Eip;    // EIP - Instruction Pointer
+		stack.AddrFrame.Offset = m_hCurrentWoWContext.Ebp; // EBP
+		stack.AddrStack.Offset = m_hCurrentWoWContext.Esp; // ESP - Stack Pointer
+	}
+	else
+	{
+		stack.AddrPC.Offset = m_hCurrentContext.Rip;    // EIP - Instruction Pointer
+		stack.AddrFrame.Offset = m_hCurrentContext.Rbp; // EBP
+		stack.AddrStack.Offset = m_hCurrentContext.Rsp; // ESP - Stack Pointer
+	}
 #endif
 
 	stack.AddrPC.Mode = AddrModeFlat;
@@ -1075,11 +1145,9 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 	pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
 	pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
 
-	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", m_hCurrentProcess);
-
 	if (FALSE == m_bSymInitialized)
 	{
-		m_bSymInitialized = TRUE;
+		Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", m_hCurrentProcess);
 		BOOL bRes = SymInitialize(m_hCurrentProcess, NULL, TRUE);
 		if (FALSE == bRes)
 		{
@@ -1088,9 +1156,12 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 			{
 				hr = HRESULT_FROM_WIN32(error);
 				Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
+				FATAL_ERROR(hr);
 				goto Cleanup;
 			}
 		}
+
+		m_bSymInitialized = TRUE;
 	}
 
 //	// We have the IP, search in the cache first before calling API to get the mod name
@@ -1121,6 +1192,7 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 			hr = HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
 					hr, (DWORD64)stack.AddrPC.Offset);
+			FATAL_ERROR(hr);
 			goto Exit;
 		}
 		else
@@ -1143,12 +1215,16 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 #ifdef _X86_
 				IMAGE_FILE_MACHINE_I386,
 #else
-				IMAGE_FILE_MACHINE_AMD64,
+				bIsWow ? IMAGE_FILE_MACHINE_I386 : IMAGE_FILE_MACHINE_AMD64,
 #endif
 				m_hCurrentProcess,
 				m_hCurrentThread,
 				&stack,
-				(PVOID)(&m_hCurrentContext), // only pass for x86
+#ifdef _X86_
+				NULL,
+#else
+				(PVOID)(&m_hCurrentContext), // Only needed when MachineType  != IMAGE_FILE_MACHINE_I386
+#endif
 				NULL,
 				SymFunctionTableAccess64,
 				SymGetModuleBase64,
@@ -1185,7 +1261,6 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 			//Write(WriteLevel::Info, L" %d %s", frameNum, wsFuctionName.c_str());
 
 			mapStack->push_front(sFuntionName);
-
 		}
 		else
 		{

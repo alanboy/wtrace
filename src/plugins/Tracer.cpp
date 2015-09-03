@@ -135,34 +135,36 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 		std::list<std::string> mapStack;
 		hr = m_DebugEngine->GetCurrentCallstack(&mapStack);
 
-		auto it = mapStack.front();
-
-		if (it.compare(strLastFunction) != 0)
+		if (!FAILED(hr) && !mapStack.empty())
 		{
-			strLastFunction = it;
+			auto it = mapStack.front();
+
+			if (it.compare(strLastFunction) != 0)
+			{
+				strLastFunction = it;
 
 #ifdef _X86_
-			std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
-			std::cout << "esp=0x" << std::hex << mapRegisters.at("esp") << " ";
+				std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
+				std::cout << "esp=0x" << std::hex << mapRegisters.at("esp") << " ";
 #else
-			std::cout << "rip=0x" << std::hex << mapRegisters.at("rip") << " ";
-			std::cout << "rsp=0x" << std::hex << mapRegisters.at("rsp") << " ";
+				std::cout << "rip=0x" << std::hex << mapRegisters.at("rip") << " ";
+				std::cout << "rsp=0x" << std::hex << mapRegisters.at("rsp") << " ";
 #endif
 
-			std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
+				std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
 
 
-			for (auto it = mapStack.begin(); it != mapStack.end(); it++)
-			{
-				std::cout << "  ";
+				for (auto it = mapStack.begin(); it != mapStack.end(); it++)
+				{
+					std::cout << "  ";
+				}
+
+				std::cout << mapStack.back() << "()";
+				std::cout  << std::endl;
+
+				//		hr = m_DebugEngine->SetSingleStepFlag();
 			}
-
-			std::cout << mapStack.back() << "()";
-			std::cout  << std::endl;
-
-			//		hr = m_DebugEngine->SetSingleStepFlag();
 		}
-
 	}
 
 	EXIT_FN;
