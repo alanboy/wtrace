@@ -12,7 +12,6 @@
 
 class DebugEventCallback;
 class WowDebugEngine;
-class NativeDebugEngine;
 
 //
 // Public interface for debugging engine
@@ -39,7 +38,6 @@ protected:
 
 private: 
 	WowDebugEngine *wow64engine;
-	NativeDebugEngine *nativeEngine;
 
 	DebugEventCallback * m_pCallback = nullptr;
 

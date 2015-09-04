@@ -23,8 +23,6 @@
 
 // Debugging engines
 #include "DebugEngine.h"
-#include "ArchitectureSpecificInterface.h"
-#include "NativeDebugEngine.h"
 #include "wow64.h"
 
 #define STACKWALK_MAX_NAMELEN 1024

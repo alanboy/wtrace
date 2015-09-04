@@ -14,7 +14,6 @@
 #include "Tracer.h"
 #include "output.h"
 
-#include "ArchitectureSpecificInterface.h"
 #include "DebugEngine.h"
 #include "wow64.h"
 

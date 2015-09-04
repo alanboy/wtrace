@@ -27,6 +27,7 @@
 
 BOOL OptionInteractive = FALSE;
 BOOL OptionHtml = FALSE;
+BOOL OptionFunctionLevel = FALSE;
 
 void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 {
@@ -89,6 +90,10 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 		{
 			i++;
 			gAnalysisLevel = _wtoi(argv[i]);
+		}
+		else if (CMPSTR(argv[i], L"-f"))
+		{
+			OptionFunctionLevel = TRUE;
 		}
 		else if (CMPSTR(argv[i], L"-debugbreak"))
 		{
@@ -153,9 +158,8 @@ int wmain(int argc, wchar_t ** argv)
 		htmlOutput = new HtmlOutput(&engine, L"out.html");
 		engine.AddCallback(htmlOutput);
 	}
-	else
+	else if (OptionFunctionLevel)
 	{
-		// if not Html-ing or interactive, then just trace
 		tracerPlugin = new TracerPlugin(&engine);
 		engine.AddCallback(tracerPlugin);
 	}
@@ -173,6 +177,6 @@ Cleanup:
 
 	EXIT_FN_NO_RET;
 
-	return 0;
+	return hr;
 }
 

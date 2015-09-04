@@ -16,7 +16,6 @@ WtraceBins=bin\$(TargetPlatform)\wtrace.exe
 CppSources=..\..\src\Main.cpp  \
 		..\..\src\debugger.cpp \
 		..\..\src\wow64.cpp    \
-		..\..\src\nativedebugengine.cpp    \
 		..\..\src\Output.cpp   \
 		..\..\src\Utils.cpp    \
 		..\..\src\plugins\html.cpp    \
@@ -26,7 +25,6 @@ CppSources=..\..\src\Main.cpp  \
 HeaderFiles=..\..\src\inc\
 
 PluginHeaderFiles=..\..\src\plugins\
-
 
 all: clean $(WtraceBins)
 	echo done!
@@ -60,24 +58,4 @@ publish: latest\$(TargetPlatform) $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(Bi
 	whoami >> latest\$(TargetPlatform)\readme.txt
 	time /t >> latest\$(TargetPlatform)\readme.txt
 	date /t >> latest\$(TargetPlatform)\readme.txt
-
-
-####################################################333
-# TESTS
-testwow: bin\x64\wtrace.exe bin\x86\wtrace.exe bin\x86\wtrace.pdb
-	bin\x64\wtrace.exe -v info -a 3 "bin\x86\wtrace.exe -?"
-
-testwowdebug: bin\x64\wtrace.exe bin\x86\wtrace.exe bin\x86\wtrace.pdb
-	bin\x64\wtrace.exe -v debug -a 3 "bin\x86\wtrace.exe -?"
-
-test: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
-	$(BinDir)\wtrace.exe -v info -a 3 "$(BinDir)\wtrace.exe -?"
-
-testdebug: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
-	$(BinDir)\wtrace.exe -html -v debug -a 3 "$(BinDir)\wtrace.exe -?"
-
-testi: $(BinDir)\wtrace.exe $(BinDir)\wtrace.pdb $(BinDir)\vc120.pdb
-	$(BinDir)\wtrace.exe -i -v info -a 3 "$(BinDir)\wtrace.exe -?"
-
-
 
