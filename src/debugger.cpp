@@ -217,7 +217,6 @@ HRESULT DebugEngine::Run()
 					Write(WriteLevel::Debug, L"\tIllegal Instruction  An attempt was made to execute an illegal instruction.");
 					break;
 
-
 					//////////////////////////////////////////////
 					//				WOW Exceptions
 					//////////////////////////////////////////////

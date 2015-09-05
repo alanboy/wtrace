@@ -7,6 +7,7 @@
 
 extern wchar_t *gOutputFile;
 extern wchar_t *gpCommandLine;
+extern wchar_t *gpCommandToInteractive;
 extern FILE * gFileHandle;
 extern int gAnalysisLevel;
 

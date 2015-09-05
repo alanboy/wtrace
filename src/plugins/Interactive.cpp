@@ -24,6 +24,11 @@ InteractiveCommandLine::InteractiveCommandLine(DebugEngine * engine)
 	m_DebugEngine = engine;
 }
 
+void InteractiveCommandLine::SetCommandToExecute(const std::wstring& wsCommand)
+{
+	m_wsCommandToExecute = wsCommand;
+}
+
 HRESULT InteractiveCommandLine::DebugEvent(const DEBUG_EVENT& event)
 {
 	ENTER_FN
@@ -150,9 +155,34 @@ HRESULT InteractiveCommandLine::DebugEvent(const DEBUG_EVENT& event)
 		std::cout << "rip=0x" << std::hex << mapRegisters.at("rip") << std::endl;
 #endif
 
-		std::cout << "input>";
 
-		std::cin >> m_sCurrentCmd;
+		if (m_wsCommandToExecute.empty())
+		{
+			std::cout << "input>";
+			std::cin >> m_sCurrentCmd;
+		}
+		else
+		{
+			std::cout << "auto>";
+
+			std::string str(m_wsCommandToExecute.begin(), m_wsCommandToExecute.end() );
+
+			// @TODO if ";" exists, then put the first part into currentCmd
+			// and leave the rest in the buffer.
+			std::size_t found = str.find(";");
+			if (found != std::string::npos)
+			{
+				m_sCurrentCmd = str.substr(0, found);
+				m_wsCommandToExecute = m_wsCommandToExecute.substr(found+1);
+			}
+			else
+			{
+				m_sCurrentCmd = str;
+				m_wsCommandToExecute.clear();
+			}
+
+			std::cout << m_sCurrentCmd << std::endl;
+		}
 
 		Dispatch(&bLetGo);
 

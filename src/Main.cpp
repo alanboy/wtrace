@@ -28,6 +28,7 @@
 BOOL OptionInteractive = FALSE;
 BOOL OptionHtml = FALSE;
 BOOL OptionFunctionLevel = FALSE;
+wchar_t *gpCommandToInteractive;
 
 void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 {
@@ -82,6 +83,16 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 		{
 			OptionInteractive = TRUE;
 		}
+		else if (CMPSTR(argv[i], L"-c"))
+		{
+			// -c option, must be used with -i
+			OptionInteractive = TRUE;
+
+			i++;
+			gpCommandToInteractive = (WCHAR*)malloc(sizeof(WCHAR)*wcslen(argv[i]));
+			StringCchCopy(gpCommandToInteractive, sizeof(WCHAR)*wcslen(argv[i]), argv[i]);
+
+		}
 		else if (CMPSTR(argv[i], L"-html"))
 		{
 			OptionHtml = TRUE;
@@ -100,6 +111,16 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 			*pfExitProgram = true;
 			Write(WriteLevel::Output, L"About to call DebugBreak");
 			DebugBreak();
+		}
+		else if (CMPSTR(argv[i], L"-createprocess"))
+		{
+			// Launch another process
+			*pfExitProgram = true;
+		}
+		else if (CMPSTR(argv[i], L"-debugoutput"))
+		{
+			// Print something with DebugOutput
+			*pfExitProgram = true;
 		}
 	}
 
@@ -151,6 +172,11 @@ int wmain(int argc, wchar_t ** argv)
 	// on the passed object on each debug event.
 	if (OptionInteractive)
 	{
+		if (gpCommandToInteractive)
+		{
+			std::wstring foo(gpCommandToInteractive);
+			interactive.SetCommandToExecute(foo);
+		}
 		engine.AddCallback(&interactive);
 	}
 	else if (OptionHtml)

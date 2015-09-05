@@ -45,11 +45,14 @@ rem
 rem echo ==== Test html mode
 rem bin\x64\wtrace.exe -html -a 3 "bin\x86\wtrace.exe -?"
 rem if NOT ERRORLEVEL 0 goto failed
-rem 
-rem echo ==== Test interactive mode
-rem bin\x64\wtrace.exe -i -a 3 "bin\x86\wtrace.exe -?"
-rem if NOT ERRORLEVEL 0 goto failed
 
+echo ==== Test interactive mode (simple)
+echo g |  bin\x64\wtrace.exe -i "bin\x64\wtrace.exe -?" > NUL
+if NOT ERRORLEVEL 0 goto failed
+
+echo ==== Test interactive mode (command line)
+bin\x64\wtrace.exe -i -c "kn;g;g;g;g;g;g" "bin\x64\wtrace.exe -?" > NUL
+if NOT ERRORLEVEL 0 goto failed
 
 echo All test passed.
 goto end
