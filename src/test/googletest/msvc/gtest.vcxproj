@@ -63,12 +63,12 @@
     <_ProjectFileVersion>12.0.21005.1</_ProjectFileVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</OutDir>
-    <IntDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</IntDir>
+    <OutDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</OutDir>
+    <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</OutDir>
-    <IntDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</IntDir>
+    <OutDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</OutDir>
+    <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionName)/$(Configuration)\</OutDir>

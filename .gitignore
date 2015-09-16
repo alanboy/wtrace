@@ -2,3 +2,9 @@ bin
 bin.Win32/
 obj.Win32/
 wtrace.v12.suo
+bin.x64/
+bin.x86/
+obj.x64/
+obj.x86/
+wtrace.opensdf
+wtrace.sdf

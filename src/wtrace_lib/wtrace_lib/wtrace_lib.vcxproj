@@ -94,8 +94,8 @@
   <PropertyGroup />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <GenerateManifest>false</GenerateManifest>
-    <OutDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</OutDir>
-    <IntDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</IntDir>
+    <OutDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</OutDir>
+    <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
     <IncludePath>$(SolutionDir)\src\inc;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -103,8 +103,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
     <GenerateManifest>false</GenerateManifest>
-    <OutDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</OutDir>
-    <IntDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</IntDir>
+    <OutDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</OutDir>
+    <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
     <IncludePath>$(SolutionDir)\src\inc;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
@@ -112,8 +112,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <GenerateManifest>false</GenerateManifest>
-    <OutDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</OutDir>
-    <IntDir>$(SolutionDir)\obj.$(Platform)\$(TargetName)\</IntDir>
+    <OutDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</OutDir>
+    <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(VC_SourcePath)\inc;$(VC_SourcePath)\plugins;$(SolutionDir)\src\inc;</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
