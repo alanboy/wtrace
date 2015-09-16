@@ -175,7 +175,7 @@ HRESULT WowDebugEngine::Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 
 		std::string sFuntionName;
 		std::wstring wsFuctionName;
-		DWORD instructionPointer;
+		DWORD instructionPointer = 0;
 		//hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
 
 		if (FAILED(hr))

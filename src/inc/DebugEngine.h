@@ -26,6 +26,7 @@ private:
 	int m_iAnalysisLevel;
 	int m_iSpawnedProcess;
 	long m_lFunctionCalls = 0;
+	wchar_t * m_StrCmd;
 	std::map<std::string, IMAGEHLP_MODULE64> m_mLoadedModules;
 	std::map<DWORD64, BYTE> m_mBreakpointsOriginalInstruction;
 
@@ -59,6 +60,7 @@ public:
 	HRESULT GetRegisters(std::map<std::string, DWORD64> *mapRegisters);
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT SetSingleStepFlag();
+	HRESULT SetCommandLine(wchar_t *strCmd);
 	HRESULT Run();
 	HRESULT IsWowProcess(bool *bIsWow);
 };

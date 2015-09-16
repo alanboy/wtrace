@@ -166,10 +166,8 @@ HRESULT InteractiveCommandLine::DebugEvent(const DEBUG_EVENT& event)
 			std::cout << "auto>";
 
 			std::string str(m_wsCommandToExecute.begin(), m_wsCommandToExecute.end() );
-
-			// @TODO if ";" exists, then put the first part into currentCmd
-			// and leave the rest in the buffer.
 			std::size_t found = str.find(";");
+
 			if (found != std::string::npos)
 			{
 				m_sCurrentCmd = str.substr(0, found);

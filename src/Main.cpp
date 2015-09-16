@@ -143,7 +143,7 @@ void Logo(void)
 {
 	// @TODO put date here
 	//http://stackoverflow.com/questions/997946/how-to-get-current-time-and-date-in-c
-	printf("trace 0.0.0.1\n(c) 2013-2015 Alan Gonzalez\n\n");
+	printf("trace 0.0.0.2\n(c) 2013-2015 Alan Gonzalez\n\n");
 }
 
 int wmain(int argc, wchar_t ** argv)
@@ -177,6 +177,7 @@ int wmain(int argc, wchar_t ** argv)
 			std::wstring foo(gpCommandToInteractive);
 			interactive.SetCommandToExecute(foo);
 		}
+
 		engine.AddCallback(&interactive);
 	}
 	else if (OptionHtml)
@@ -189,6 +190,8 @@ int wmain(int argc, wchar_t ** argv)
 		tracerPlugin = new TracerPlugin(&engine);
 		engine.AddCallback(tracerPlugin);
 	}
+
+	engine.SetCommandLine(gpCommandLine);
 
 	hr = engine.Run();
 

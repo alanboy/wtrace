@@ -107,6 +107,15 @@ HRESULT DebugEngine::GetRegisters(
 	EXIT_FN;
 }
 
+HRESULT DebugEngine::SetCommandLine(wchar_t *strCmd)
+{
+	ENTER_FN
+
+	m_StrCmd = strCmd;
+
+	EXIT_FN;
+}
+
 HRESULT DebugEngine::Run()
 {
 	ENTER_FN
@@ -125,13 +134,13 @@ HRESULT DebugEngine::Run()
 	memset(&si, 0, sizeof(si));
 	memset(&pi, 0, sizeof(pi));
 
-	Write(WriteLevel::Debug, L"Creating process %s", gpCommandLine);
+	Write(WriteLevel::Debug, L"Creating process %s", m_StrCmd);
 
 	SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
 	DWORD StartTicks = GetTickCount();
 	gStartTicks = StartTicks;
 
-	bCreateProcRes = CreateProcess(NULL, gpCommandLine, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
+	bCreateProcRes = CreateProcess(NULL, m_StrCmd, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
 
 	if (!bCreateProcRes)
 	{
