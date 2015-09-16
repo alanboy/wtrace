@@ -99,7 +99,7 @@
       <ProgramDatabaseFile>$(OutDir)gtest_prod_test.pdb</ProgramDatabaseFile>
       <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>
-      <AdditionalDependencies>$(SolutionDir)\obj.$(Platform)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dbghelp.lib;$(SolutionDir)\obj.$(Platform)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

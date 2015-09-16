@@ -1,1 +1,4 @@
 bin
+bin.Win32/
+obj.Win32/
+wtrace.v12.suo
