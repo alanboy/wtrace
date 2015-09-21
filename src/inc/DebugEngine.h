@@ -48,6 +48,7 @@ private:
 	HRESULT ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread,const EXCEPTION_RECORD& exception );
 	HRESULT ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess);
 	HRESULT ExceptionSingleStep();
+	HRESULT GetModuleName(DWORD64 add,std::string *sModuleName);
 
 public:
 	// OTher stuff

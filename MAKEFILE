@@ -10,21 +10,21 @@ TargetPlatform=x86
 !ENDIF
 !ENDIF
 
-BinDir=bin\$(TargetPlatform)
-WtraceBins=bin\$(TargetPlatform)\wtrace.exe
+BinDir=bin.$(TargetPlatform)
+WtraceBins=bin.$(TargetPlatform)\wtrace.exe
 
-CppSources=..\..\src\Main.cpp  \
-		..\..\src\debugger.cpp \
-		..\..\src\wow64.cpp    \
-		..\..\src\Output.cpp   \
-		..\..\src\Utils.cpp    \
-		..\..\src\plugins\html.cpp    \
-		..\..\src\plugins\interactive.cpp    \
-		..\..\src\plugins\Tracer.cpp    \
+CppSources=..\src\Main.cpp  \
+			..\src\debugger.cpp \
+			..\src\wow64.cpp    \
+			..\src\Output.cpp   \
+			..\src\Utils.cpp    \
+			..\src\plugins\html.cpp    \
+			..\src\plugins\interactive.cpp    \
+			..\src\plugins\Tracer.cpp    \
 
-HeaderFiles=..\..\src\inc\
+HeaderFiles=..\src\inc\
 
-PluginHeaderFiles=..\..\src\plugins\
+PluginHeaderFiles=..\src\plugins\
 
 all: clean $(WtraceBins)
 	echo done!
@@ -47,7 +47,7 @@ $(WtraceBins): src\debugger.cpp src\wow64.cpp src\output.cpp src\plugins\html.cp
 	cd ..\..
 
 clean:
-	IF EXIST bin\$(TargetPlatform) del /q bin\$(TargetPlatform)\*
+	IF EXIST bin.$(TargetPlatform) del /q bin.$(TargetPlatform)\*
 
 ####################################################333
 # PUBLISH A NEW VERSION TO LATEST

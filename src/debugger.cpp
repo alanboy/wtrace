@@ -107,6 +107,58 @@ HRESULT DebugEngine::GetRegisters(
 	EXIT_FN;
 }
 
+
+HRESULT DebugEngine::GetModuleName(
+		DWORD64 add,
+		std::string *sModuleName
+		)
+{
+	ENTER_FN;
+
+	bool bModuleFound = FALSE;
+
+//	// We have the IP, search in the cache first before calling API to get the mod name
+//	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
+//	for (it = m_mLoadedModules.begin(); it != m_mLoadedModules.end(); ++it)
+//	{
+//		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
+//				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
+//		{
+//			sModuleName = it->first;
+//			bModuleFound = TRUE;
+//		}
+//	}
+
+	if (!bModuleFound)
+	{
+		// if we got out, this means we havent loaded this module, do it
+		IMAGEHLP_MODULE64 module_info_module;
+		module_info_module.SizeOfStruct = sizeof(module_info_module);
+
+		BOOL bSuccess = SymGetModuleInfo64(
+				m_hCurrentProcess,
+				add,
+				&module_info_module);
+
+		if (!bSuccess)
+		{
+			hr = HRESULT_FROM_WIN32(GetLastError());
+			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
+					hr, (DWORD64)add);
+			FATAL_ERROR(hr);
+			goto Exit;
+		}
+		else
+		{
+			// Add this new found module to the cache
+			*sModuleName = module_info_module.ModuleName;
+			m_mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(*sModuleName, module_info_module));
+		}
+	}
+
+	EXIT_FN;
+}
+
 HRESULT DebugEngine::SetCommandLine(wchar_t *strCmd)
 {
 	ENTER_FN
@@ -526,8 +578,6 @@ Cleanup:
 
 	EXIT_FN
 }
-
-
 
 HRESULT DebugEngine::InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address)
 {
@@ -1090,10 +1140,8 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 
 	STACKFRAME64 stack = {0};
 	IMAGEHLP_SYMBOL64 *pSym = NULL;
-	bool bModuleFound = FALSE;
 	DWORD64 dwOffsetFromSmybol = 0;
 	BOOL bResult = FALSE;
-	std::string sModuleName;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
 	int nFramesToRead = 256;
 
@@ -1169,44 +1217,6 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 		m_bSymInitialized = TRUE;
 	}
 
-//	// We have the IP, search in the cache first before calling API to get the mod name
-//	Write(WriteLevel::Debug, L"im looking for this address, 0x%p", stack.AddrPC.Offset);
-//	for (it = m_mLoadedModules.begin(); it != m_mLoadedModules.end(); ++it)
-//	{
-//		if ((stack.AddrPC.Offset > it->second.BaseOfImage)
-//				&& (stack.AddrPC.Offset < (it->second.BaseOfImage + it->second.ImageSize)))
-//		{
-//			sModuleName = it->first;
-//			bModuleFound = TRUE;
-//		}
-//	}
-
-	if (!bModuleFound)
-	{
-		// if we got out, this means we havent loaded this module, do it
-		IMAGEHLP_MODULE64 module_info_module;
-		module_info_module.SizeOfStruct = sizeof(module_info_module);
-
-		BOOL bSuccess = SymGetModuleInfo64(
-				m_hCurrentProcess,
-				stack.AddrPC.Offset,
-				&module_info_module);
-
-		if (!bSuccess)
-		{
-			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
-					hr, (DWORD64)stack.AddrPC.Offset);
-			FATAL_ERROR(hr);
-			goto Exit;
-		}
-		else
-		{
-			// Add this new found module to the cache
-			sModuleName = module_info_module.ModuleName;
-			m_mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
-		}
-	}
 
 	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{
@@ -1256,6 +1266,10 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 									&dwOffsetFromSmybol,
 									pSym) != FALSE)
 		{
+
+			std::string sModuleName;
+			GetModuleName(stack.AddrPC.Offset, &sModuleName);
+
 			std::string sFuntionName;
 			sFuntionName = sModuleName;
 			sFuntionName += "!";
