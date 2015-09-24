@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string>
 #include <Dbghelp.h>
+#include <Strsafe.h>
 
 #include <iostream>
 #include <map>
@@ -161,9 +162,11 @@ HRESULT DebugEngine::GetModuleName(
 
 HRESULT DebugEngine::SetCommandLine(wchar_t *strCmd)
 {
-	ENTER_FN
+	ENTER_FN;
 
-	m_StrCmd = strCmd;
+	// Currently leaking
+	m_StrCmd = (WCHAR*)malloc(sizeof(WCHAR)*wcslen(strCmd));
+	StringCchCopy(m_StrCmd, sizeof(WCHAR)*wcslen(strCmd), strCmd);
 
 	EXIT_FN;
 }
@@ -192,7 +195,7 @@ HRESULT DebugEngine::Run()
 	DWORD StartTicks = GetTickCount();
 	gStartTicks = StartTicks;
 
-	bCreateProcRes = CreateProcess(NULL, m_StrCmd, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
+	bCreateProcRes = CreateProcess(NULL, m_StrCmd, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi);
 
 	if (!bCreateProcRes)
 	{

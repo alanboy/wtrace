@@ -30,12 +30,15 @@
 // Author: wan@google.com (Zhanyong Wan)
 //
 // Unit test for include/gtest/gtest_prod.h.
+#define UNICODE
+#define _UNICODE
 
 #include "gtest/gtest.h"
 #include "test/production.h"
 
 #include <windows.h>
 #include "DebugEngine.h"
+#include "Output.h"
 
 /** Implement the following test cases */
 /*
@@ -89,31 +92,21 @@ goto end
 
 */
 TEST(WtraceHelpTest, CanAccessPrivateMembers) {
-	EXPECT_EQ(1, 1);
-
 	DebugEngine engine;
-	engine.SetCommandLine(L"bin.x64\\wtrace.exe -?");
+	gWriteLevelThreshold = WriteLevel::Debug;
+
+	std::wstring foo( L"C:\\Users\\alanb\\Code\\wtrace2\\wtrace\\bin.x86\\wtrace.exe");
+	wchar_t * pm = L"C:\\Users\\alanb\\Code\\wtrace2\\wtrace\\bin.x86\\wtrace.exe\0\0";
+
+
+	STARTUPINFOW si;
+	PROCESS_INFORMATION pi;
+	memset(&si, 0, sizeof(si));
+	memset(&pi, 0, sizeof(pi));
+
+	//CreateProcess(NULL, pm, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi);
+	
+	engine.SetCommandLine(pm);
 	engine.Run();
 }
 
-// Tests that private members can be accessed from a TEST declared as
-// a friend of the class.
-TEST(PrivateCodeTest, CanAccessPrivateMembers) {
-  PrivateCode a;
-  EXPECT_EQ(0, a.x_);
-
-  a.set_x(1);
-  EXPECT_EQ(1, a.x_);
-}
-
-typedef testing::Test PrivateCodeFixtureTest;
-
-// Tests that private members can be accessed from a TEST_F declared
-// as a friend of the class.
-TEST_F(PrivateCodeFixtureTest, CanAccessPrivateMembers) {
-  PrivateCode a;
-  EXPECT_EQ(0, a.x_);
-
-  a.set_x(2);
-  EXPECT_EQ(2, a.x_);
-}
