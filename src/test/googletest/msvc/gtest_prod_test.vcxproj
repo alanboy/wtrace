@@ -66,12 +66,14 @@
     <OutDir>$(SolutionDir)\bin.$(PlatformTarget)\</OutDir>
     <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(SolutionDir)\src\inc;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)\bin.$(PlatformTarget)\</OutDir>
     <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
     <GenerateManifest>false</GenerateManifest>
+    <IncludePath>$(SolutionDir)\src\inc;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionName)/$(Configuration)\</OutDir>
@@ -91,7 +93,8 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
-      <AdditionalIncludeDirectories>C:\Users\alanb\Code\wtrace\src\inc\;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>
+      </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)gtest_prod_test.exe</OutputFile>
@@ -99,7 +102,7 @@
       <ProgramDatabaseFile>$(OutDir)gtest_prod_test.pdb</ProgramDatabaseFile>
       <SubSystem>Console</SubSystem>
       <TargetMachine>MachineX86</TargetMachine>
-      <AdditionalDependencies>dbghelp.lib;$(SolutionDir)\obj.$(Platform)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dbghelp.lib;$(SolutionDir)\obj.$(PlatformTarget)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

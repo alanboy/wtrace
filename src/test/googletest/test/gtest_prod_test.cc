@@ -98,7 +98,6 @@ TEST(WtraceHelpTest, CanAccessPrivateMembers) {
 	std::wstring foo( L"C:\\Users\\alanb\\Code\\wtrace2\\wtrace\\bin.x86\\wtrace.exe");
 	wchar_t * pm = L"C:\\Users\\alanb\\Code\\wtrace2\\wtrace\\bin.x86\\wtrace.exe\0\0";
 
-
 	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
 	memset(&si, 0, sizeof(si));

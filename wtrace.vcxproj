@@ -61,13 +61,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(VC_SourcePath)\inc;$(VC_SourcePath)\plugins;</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(VC_SourcePath)\inc;$(VC_SourcePath)\plugins;$(SolutionDir)\src\inc</IncludePath>
     <OutDir>$(SolutionDir)\bin.$(PlatformTarget)\</OutDir>
     <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(VC_SourcePath)\inc;$(VC_SourcePath)\plugins;</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(VC_SourcePath)\inc;$(VC_SourcePath)\plugins;$(ProjectDir)\src\inc\</IncludePath>
     <OutDir>$(SolutionDir)\bin.$(PlatformTarget)\</OutDir>
     <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
   </PropertyGroup>
@@ -90,7 +90,7 @@
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>Dbghelp.lib;$(SolutionDir)\obj.$(Platform)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Dbghelp.lib;$(SolutionDir)\obj.$(PlatformTarget)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
