@@ -183,10 +183,10 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\debugger.cpp" />
-    <ClCompile Include="..\..\Output.cpp" />
-    <ClCompile Include="..\..\Utils.cpp" />
-    <ClCompile Include="..\..\wow64.cpp" />
+    <ClCompile Include="..\debugger.cpp" />
+    <ClCompile Include="..\Output.cpp" />
+    <ClCompile Include="..\Utils.cpp" />
+    <ClCompile Include="..\wow64.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

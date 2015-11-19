@@ -67,7 +67,7 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(VC_SourcePath)\inc;$(VC_SourcePath)\plugins;$(ProjectDir)\src\inc\</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(VC_SourcePath)\inc;$(VC_SourcePath)\plugins;$(SolutionDir)\src\inc\</IncludePath>
     <OutDir>$(SolutionDir)\bin.$(PlatformTarget)\</OutDir>
     <IntDir>$(SolutionDir)\obj.$(PlatformTarget)\$(TargetName)\</IntDir>
   </PropertyGroup>
@@ -138,21 +138,21 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\Main.cpp" />
-    <ClCompile Include="src\plugins\html.cpp" />
-    <ClCompile Include="src\plugins\Interactive.cpp" />
-    <ClCompile Include="src\plugins\Tracer.cpp" />
+    <ClCompile Include="..\Main.cpp" />
+    <ClCompile Include="..\plugins\html.cpp" />
+    <ClCompile Include="..\plugins\Interactive.cpp" />
+    <ClCompile Include="..\plugins\Tracer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\inc\DebugEngine.h" />
-    <ClInclude Include="src\inc\DebugEventCallback.h" />
-    <ClInclude Include="src\inc\Main.h" />
-    <ClInclude Include="src\inc\Output.h" />
-    <ClInclude Include="src\inc\Utils.h" />
-    <ClInclude Include="src\inc\wow64.h" />
-    <ClInclude Include="src\plugins\html.h" />
-    <ClInclude Include="src\plugins\interactive.h" />
-    <ClInclude Include="src\plugins\Tracer.h" />
+    <ClInclude Include="..\inc\DebugEngine.h" />
+    <ClInclude Include="..\inc\DebugEventCallback.h" />
+    <ClInclude Include="..\inc\Main.h" />
+    <ClInclude Include="..\inc\Output.h" />
+    <ClInclude Include="..\inc\Utils.h" />
+    <ClInclude Include="..\inc\wow64.h" />
+    <ClInclude Include="..\plugins\html.h" />
+    <ClInclude Include="..\plugins\interactive.h" />
+    <ClInclude Include="..\plugins\Tracer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

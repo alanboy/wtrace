@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wtrace", "wtrace.vcxproj", "{A49FDB88-9D0B-407E-B1A2-A7976A0B3CB1}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wtrace", "src\exe\wtrace.vcxproj", "{A49FDB88-9D0B-407E-B1A2-A7976A0B3CB1}"
 	ProjectSection(ProjectDependencies) = postProject
 		{45195FAF-8766-4B63-BD0D-629D38AA231E} = {45195FAF-8766-4B63-BD0D-629D38AA231E}
 	EndProjectSection
@@ -17,7 +17,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gtest_prod_test", "src\test
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gtest_main", "src\test\googletest\msvc\gtest_main.vcxproj", "{3AF54C8A-10BF-4332-9147-F68ED9862032}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wtrace_lib", "src\wtrace_lib\wtrace_lib\wtrace_lib.vcxproj", "{45195FAF-8766-4B63-BD0D-629D38AA231E}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wtrace_lib", "src\wtrace_lib\wtrace_lib.vcxproj", "{45195FAF-8766-4B63-BD0D-629D38AA231E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -74,8 +74,7 @@ Global
 		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Debug|x64.Build.0 = Debug|x64
 		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Debug|x86.ActiveCfg = Debug|Win32
 		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Debug|x86.Build.0 = Debug|Win32
-		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Release|ARM.ActiveCfg = Release|ARM
-		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Release|ARM.Build.0 = Release|ARM
+		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Release|ARM.ActiveCfg = Release|Win32
 		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Release|x64.ActiveCfg = Release|x64
 		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Release|x64.Build.0 = Release|x64
 		{45195FAF-8766-4B63-BD0D-629D38AA231E}.Release|x86.ActiveCfg = Release|Win32
