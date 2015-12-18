@@ -44,6 +44,12 @@ HRESULT DumpWowContext(const WOW64_CONTEXT& lcContext)
 	EXIT_FN
 }
 
+HRESULT WowDebugEngine::SetStartAddress(DWORD64 startAddress)
+{
+	m_dw64StartAddress = startAddress;
+	return S_OK;
+}
+
 HRESULT WowDebugEngine::Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 {
 	ENTER_FN
@@ -73,7 +79,13 @@ HRESULT WowDebugEngine::Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
 			/////////////////////////////////////////////////////////////////
 			// If this is our first time hitting WoW64 BreakPoint, set a BP
 			// at the start address 
-			//
+			
+			if (m_dw64StartAddress == 0)
+			{
+				Write(WriteLevel::Info, L"WOW64 m_dw64StartAddress is zero");
+				goto Exit;
+			}
+
 			// Read the first instruction and save it
 			BYTE cInstruction;
 			SIZE_T lpNumberOfBytesRead;
@@ -148,6 +160,8 @@ HRESULT WowDebugEngine::Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 
 	WOW64_CONTEXT lcWowContext = {0};
 	BOOL bResult = FALSE;
+	m_hCurrentProcess = hProcess;
+	m_hCurrentThread = hThread;
 
 	if (gAnalysisLevel >= 3)
 	{
@@ -161,6 +175,7 @@ HRESULT WowDebugEngine::Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 			goto Exit;
 		}
 
+		m_hCurrentContext = lcWowContext;
 		hr = DumpWowContext(lcWowContext);
 
 		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
@@ -173,23 +188,23 @@ HRESULT WowDebugEngine::Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 			goto Exit;
 		}
 
-		std::string sFuntionName;
 		std::wstring wsFuctionName;
-		DWORD instructionPointer = 0;
-		//hr = RetrieveWoWCallstack(hThread, hProcess, lcWowContext, 1 /* 1 frame */, &sFuntionName, &instructionPointer);
-
+		std::list<std::string> mapStack;
+		hr = GetCurrentCallstack(&mapStack);
 		if (FAILED(hr))
 		{
 			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
 			goto Exit;
 		}
 
-		wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
+		if (!mapStack.empty())
+		{
+			wsFuctionName.assign(mapStack.back().begin(), mapStack.back().end());
 
-		Write(WriteLevel::Info, L"0x%08x thread=%x  %s", 
-				instructionPointer,
-				hThread,
-				wsFuctionName.c_str());
+			Write(WriteLevel::Info, L" Thread=%x -> %s", 
+					hThread,
+					wsFuctionName.c_str());
+		}
 
 	}
 
@@ -200,35 +215,30 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 {
 	ENTER_FN
 
+	// Check for valid m_hCurrentProcess
+
 	STACKFRAME64 stack = {0};
-	IMAGEHLP_SYMBOL64 *pSym = NULL;
 	std::string sModuleName;
 	bool bModuleFound = FALSE;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
-
-	int nFramesToRead = 256;
+	int nFramesToRead = 1;
 
 	// We can assume X86 registers
 	stack.AddrPC.Offset = m_hCurrentContext.Eip;    // EIP - Instruction Pointer
 	stack.AddrFrame.Offset = m_hCurrentContext.Ebp; // EBP
 	stack.AddrStack.Offset = m_hCurrentContext.Esp; // ESP - Stack Pointer
 
-	// C4244: Possible loss of precision
-	//*ip = (DWORD)stack.AddrPC.Offset;
-
 	// Must be like this
 	stack.AddrPC.Mode = AddrModeFlat;
 	stack.AddrFrame.Mode = AddrModeFlat;
 	stack.AddrStack.Mode = AddrModeFlat;
 
-	pSym = (IMAGEHLP_SYMBOL64*) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-	pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
-	pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
-
-	Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", m_hCurrentProcess);
+	Write(WriteLevel::Debug, L"Eip = %p", (DWORD64)stack.AddrPC.Offset);
 
 	if (FALSE == m_bSymInitialized)
 	{
+		Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", m_hCurrentProcess);
+
 		m_bSymInitialized = TRUE;
 		BOOL bRes = SymInitialize(m_hCurrentProcess, NULL, TRUE);
 		if (FALSE == bRes)
@@ -237,7 +247,7 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 			if (error != ERROR_SUCCESS)
 			{
 				hr = HRESULT_FROM_WIN32(error);
-				Write(WriteLevel::Error, L"SymInitialize failed 0x%x", error);
+				Write(WriteLevel::Error, L"SymInitialize failed 0x%x, handle is: %x", error, m_hCurrentProcess);
 				FATAL_ERROR(hr);
 				goto Cleanup;
 			}
@@ -270,8 +280,21 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 		if (!bSuccess)
 		{
 			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
+
+			if (ERROR_MOD_NOT_FOUND == hr)
+			{
+				hr = S_OK;
+			}
+			else if (0x8007007e == hr)
+			{
+				hr = S_OK;
+			}
+			else
+			{
+				Write(WriteLevel::Error, L"SymGetModuleInfo64 failed with 0x%x at addess %p",
 					hr, (DWORD64)stack.AddrPC.Offset);
+			}
+
 			goto Exit;
 		}
 		else
@@ -280,7 +303,8 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 			sModuleName = module_info_module.ModuleName;
 			m_mLoadedModules.insert(std::pair<std::string, IMAGEHLP_MODULE64>(sModuleName, module_info_module));
 
-			Write(WriteLevel::Debug, L"SymGetModuleInfo64 ok ataddress %p",
+			Write(WriteLevel::Debug, L"Found module %s at address %p",
+					sModuleName,
 					(DWORD64)stack.AddrPC.Offset);
 		}
 	}
@@ -298,8 +322,7 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 				m_hCurrentProcess,
 				m_hCurrentThread,
 				&stack,
-				NULL,// (PVOID)(&context), 
-				// Only needed when MachineType  != IMAGE_FILE_MACHINE_I386
+				(PVOID)(&m_hCurrentContext),  // Only needed when MachineType  != IMAGE_FILE_MACHINE_I386
 				NULL,
 				SymFunctionTableAccess64,
 				SymGetModuleBase64,
@@ -320,19 +343,26 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 		}
 
 		DWORD64 offsetFromSmybol;
-#if 0
-		if (FALSE == SymRefreshModuleList(hProcess))
+#if 1
+		if (FALSE == SymRefreshModuleList(m_hCurrentProcess))
 		{
 				Write(WriteLevel::Error, L"SymRefreshModuleList failed :(");
 		}
 #endif
 
+		SYMBOL_INFO *pSym = NULL;
+		pSym = (SYMBOL_INFO*)malloc(sizeof(SYMBOL_INFO) + STACKWALK_MAX_NAMELEN);
+		pSym->SizeOfStruct = sizeof(SYMBOL_INFO);
+		pSym->MaxNameLen = STACKWALK_MAX_NAMELEN;
+
 		// we seem to have a valid PC
-		if (SymGetSymFromAddr64(m_hCurrentProcess,
-									stack.AddrPC.Offset,
-									&offsetFromSmybol,
-									pSym) != FALSE)
+		if (SymFromAddr(m_hCurrentProcess,
+				stack.AddrPC.Offset,
+				&offsetFromSmybol,
+				pSym) != FALSE)
 		{
+			//Write(WriteLevel::Info, L" %d %s", frameNum, wsFuctionName.c_str());
+
 			std::string sFuntionName;
 			sFuntionName = sModuleName;
 			sFuntionName += "!";
@@ -340,7 +370,6 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 
 			std::wstring wsFuctionName;
 			wsFuctionName.assign(sFuntionName.begin(), sFuntionName.end());
-			//Write(WriteLevel::Info, L" %d %s", frameNum, wsFuctionName.c_str());
 
 			mapStack->push_front(sFuntionName);
 		}
@@ -348,20 +377,29 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 		{
 			hr = HRESULT_FROM_WIN32(GetLastError());
 			Write(WriteLevel::Error,
-						L"SymGetSymFromAddr64 failed 0x%x, address=0x%p"
-						L"hProcess 0x%x",
+						L"SymFromAddr failed 0x%x, address=0x%p"
+						L" hProcess=0x%x",
 						hr,
 						stack.AddrPC.Offset,
 						m_hCurrentProcess);
-			goto Cleanup;
+			std::string sFunctionName = sModuleName + "!<unknown>";
+			mapStack->push_front(sFunctionName);
+
+			hr = S_OK;
+			//goto Cleanup;
+		}
+
+		if (pSym)
+		{
+			delete pSym;
 		}
 	}
 
 Cleanup:
-	if (pSym)
+	/*if (pSym)
 	{
 		delete pSym;
-	}
+	}*/
 
 	EXIT_FN
 }

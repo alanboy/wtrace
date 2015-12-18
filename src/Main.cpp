@@ -46,7 +46,7 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 
 	for (i = 1; i < argc; i++)
 	{
-		if (CMPSTR(argv[i], L"-?"))
+		if (CMPSTR(argv[i], L"-?") || CMPSTR(argv[i], L"/?"))
 		{
 			WtraceUsage();
 			*pfExitProgram = TRUE;
@@ -91,7 +91,6 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 			i++;
 			gpCommandToInteractive = (WCHAR*)malloc(sizeof(WCHAR)*wcslen(argv[i]));
 			StringCchCopy(gpCommandToInteractive, sizeof(WCHAR)*wcslen(argv[i]), argv[i]);
-
 		}
 		else if (CMPSTR(argv[i], L"-html"))
 		{
@@ -119,7 +118,8 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 		}
 		else if (CMPSTR(argv[i], L"-debugoutput"))
 		{
-			// Print something with DebugOutput
+			Write(WriteLevel::Output, L"About to send text to debugger using OutputDebugString");
+			OutputDebugString(L"Some Text Sent Via OutputDebugString() \r\n");
 			*pfExitProgram = true;
 		}
 	}
@@ -132,11 +132,26 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 
 void WtraceUsage(void)
 {
-	printf("wtrace [options] cmd\n");
+	printf("wtrace [options] <cmd>\n");
 	printf("\t-?           show help\n");
 	printf("\t-o <file>    output all debugging information to <file>\n");
-	printf("\t-v <string>  set logging verbosity, can be: debug, info, output\n");
+	printf("\t-v <string>  set logging verbosity: debug, info or output\n");
 	printf("\t-a <int>     Analysis depth, can be: 1 for processes, 2 for io calls, 3 for function level (if symbols are available)\n");
+
+	printf("\n\n Plugins:\n");
+	printf("\t-f  Function level tracing.\n");
+	printf("\t-html  Html output.\n");
+	printf("\t-i  Interactive. You can pass commands to interactive mode using \"-c\" .\n");
+	printf("\t\t\tIn interative mode you can use the following commands:\n");
+	printf("\t\t\t\tg\n");
+	printf("\t\t\t\tkn\n");
+	printf("\t\t\t\tq\n");
+	
+	printf("\n\n Debugging:\n");
+	printf("\t-debugbreak\n");
+	printf("\t-createprocess  \n");
+	printf("\t-debugoutput \n");
+	
 }
 
 void Logo(void)
@@ -151,7 +166,7 @@ int wmain(int argc, wchar_t ** argv)
 	ENTER_FN;
 
 	Logo();
-
+	
 	gAnalysisLevel = 0;
 	bool fExitProgram = FALSE;
 
@@ -164,9 +179,7 @@ int wmain(int argc, wchar_t ** argv)
 	ParseCommandLine(argc, argv, &fExitProgram);
 
 	if (fExitProgram)
-	{
 		goto Cleanup;
-	}
 
 	// Add callbacks, this will cause to call the DebugEvent method
 	// on the passed object on each debug event.

@@ -219,6 +219,7 @@ HRESULT DebugEngine::Run()
 	{
 		WaitForDebugEvent(&de, INFINITE);
 
+#if 0
 		Write( (m_pCallback != nullptr) ? WriteLevel::Debug : WriteLevel::Info,
 									L"EXCEPTION_DEBUG_EVENT "
 									L"(dwProcessId = 0x%08LX"
@@ -231,6 +232,7 @@ HRESULT DebugEngine::Run()
 									de.dwDebugEventCode,
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? L"ExceptionCode = 0x" : L"",
 									de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT ? de.u.Exception.ExceptionRecord.ExceptionCode : 0);
+#endif
 
 		// @TODO update with real data, this works with 
 		// only 1 process as this is right now.
@@ -286,7 +288,7 @@ HRESULT DebugEngine::Run()
 					//////////////////////////////////////////////
 					case STATUS_WX86_BREAKPOINT:
 						Write(WriteLevel::Info, L"STATUS_WX86_BREAKPOINT");
-						//wow64engine->SetStartAddress(m_dw64StartAddress);
+						wow64engine->SetStartAddress(m_dw64StartAddress);
 						wow64engine->Wow64Breakpoint(pi.hProcess, pi.hThread);
 					break;
 
@@ -349,7 +351,7 @@ HRESULT DebugEngine::Run()
 
 					default:
 						// Handle other exceptions.
-						Write(WriteLevel::Info, L"Unknown debug event : %x ", de.u.Exception.ExceptionRecord.ExceptionCode);
+						Write(WriteLevel::Info, L"Unknown debug event : %08x ", de.u.Exception.ExceptionRecord.ExceptionCode);
 					break;
 				}
 
@@ -461,6 +463,7 @@ HRESULT DebugEngine::IsWowProcess(bool *bIsWow)
 	EXIT_FN
 }
 
+//https://msdn.microsoft.com/en-us/library/windows/desktop/aa363082(v=vs.85).aspx
 HRESULT DebugEngine::ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, const EXCEPTION_RECORD& exception)
 {
 	ENTER_FN
@@ -504,12 +507,12 @@ HRESULT DebugEngine::ExceptionAccessViolation(HANDLE hProcess, HANDLE hThread, c
 
 		DumpContext(lcContext);
 
-		hr = GetCurrentFunctionName(lcContext);
-		if (FAILED(hr))
-		{
-			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-			goto Exit;
-		}
+		//hr = GetCurrentFunctionName(lcContext);
+		//if (FAILED(hr))
+		//{
+			//Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
+			//goto Exit;
+		//}
 	}
 
 	EXIT_FN
@@ -521,7 +524,11 @@ HRESULT DebugEngine::DebugStringEvent(const DEBUG_EVENT& de)
 
 	OUTPUT_DEBUG_STRING_INFO DebugString = de.u.DebugString;
 
-	// @TODO Allocate based on unicode
+	if (DebugString.fUnicode)
+	{
+		// @TODO Allocate based on unicode		
+	}
+
 	CHAR *msg = new CHAR[DebugString.nDebugStringLength];
 
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, TRUE, de.dwProcessId);
@@ -553,21 +560,22 @@ HRESULT DebugEngine::DebugStringEvent(const DEBUG_EVENT& de)
 	{
 		if (msg[0] == 0xd && msg[1] == 0xa)
 		{
-			// <CR><LF> - Carriage regurn & New line, if we dont do this, Acces Violation when trying to print this 
+			// <CR><LF> - Carriage regurn & New line, if we dont do this,
+			// Acces Violation when trying to print this 
 			goto Cleanup;
 		}
 	}
 
 	if (DebugString.fUnicode)
 	{
-		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT: %s", msg);
+		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT (Unicode): %s", msg);
 	}
 	else
 	{
 		std::string sOutput(msg);
 		std::wstring wsOuput;
 		wsOuput.assign(sOutput.begin(), sOutput.end());
-		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT: %s ", wsOuput);
+		Write(WriteLevel::Info, L"OUTPUT_DEBUG_STRING_EVENT (ANSI): %s ", wsOuput.c_str());
 	}
 
 Cleanup:

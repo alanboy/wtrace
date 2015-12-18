@@ -42,4 +42,5 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...);
 
 #define FATAL_ERROR(X) \
 			Write(WriteLevel::Error, L"Fatal Error 0x%x at " WIDE1(__FILE__) L" : " WIDE1(__FUNCTION__), X);\
+			hr = X;
 

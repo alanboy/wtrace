@@ -30,7 +30,7 @@ public:
 	HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread);
 	HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread);
 	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);
-
+	HRESULT WowDebugEngine::SetStartAddress(DWORD64 startAddress);
 };
 
 
