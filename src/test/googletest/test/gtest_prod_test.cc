@@ -43,6 +43,8 @@
 /** Implement the following test cases */
 /*
 
+.. test a binary that outputs to the debugger using: OutputDebugString 
+
 echo == == Test help menu
 bin\x86\wtrace.exe - ? > NUL
 if NOT ERRORLEVEL 0 goto failed

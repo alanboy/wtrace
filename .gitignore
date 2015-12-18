@@ -10,3 +10,6 @@ wtrace.opensdf
 wtrace.sdf
 wtrace.v12.suo
 wtrace.vcxproj.user
+src/test/googletest/gtest-all.obj
+src/test/googletest/vc120.pdb
+src/test/gtest-all.obj
