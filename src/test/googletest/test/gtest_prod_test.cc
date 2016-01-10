@@ -34,7 +34,7 @@
 #define _UNICODE
 
 #include "gtest/gtest.h"
-#include "test/production.h"
+//#include "test/production.h"
 
 #include <windows.h>
 #include "DebugEngine.h"
@@ -93,6 +93,12 @@ echo All test passed.
 goto end
 
 */
+GTEST_API_ int main(int argc, char **argv) {
+	printf("Running main() from gtest_main.cc\n");
+	testing::InitGoogleTest(&argc, argv);
+	return RUN_ALL_TESTS();
+}
+
 TEST(WtraceHelpTest, CanAccessPrivateMembers) {
 	DebugEngine engine;
 	gWriteLevelThreshold = WriteLevel::Debug;

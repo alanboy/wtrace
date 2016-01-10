@@ -14,9 +14,6 @@
     <ClCompile Include="..\test\gtest_prod_test.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\test\production.cc">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\test\production.h">
