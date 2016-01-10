@@ -185,7 +185,7 @@ HRESULT HtmlOutput::DebugEvent(const DEBUG_EVENT& event)
 	if (event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
 			&& event.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP)
 	{
-		hr = m_DebugEngine->GetCurrentCallstack(&mapStack);
+		hr = m_DebugEngine->GetCurrentCallstack(&mapStack, 256);
 
 		if (!FAILED(hr) && !mapStack.empty())
 		{

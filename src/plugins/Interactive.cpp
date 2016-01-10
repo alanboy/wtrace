@@ -206,7 +206,7 @@ HRESULT InteractiveCommandLine::Dispatch(bool* bLetGo)
 	else if (m_sCurrentCmd.compare("kn") == 0)
 	{
 		std::list<std::string> stack;
-		hr = m_DebugEngine->GetCurrentCallstack(&stack);
+		hr = m_DebugEngine->GetCurrentCallstack(&stack, 256);
 
 		int n = 0;
 		for (auto it = stack.begin(); it != stack.end(); it++)

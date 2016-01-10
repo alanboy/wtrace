@@ -90,7 +90,7 @@
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>Dbghelp.lib;$(SolutionDir)\obj.$(PlatformTarget)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Dbghelp.lib;$(SolutionDir)\obj.$(PlatformTarget)\wtrace_lib\wtrace_lib.lib;$(SolutionDir)\obj.$(PlatformTarget)\plugins\plugins.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -105,7 +105,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>Dbghelp.lib;$(SolutionDir)\obj.$(Platform)\wtrace_lib\wtrace_lib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Dbghelp.lib;$(SolutionDir)\obj.$(PlatformTarget)\wtrace_lib\wtrace_lib.lib;$(SolutionDir)\obj.$(PlatformTarget)\plugins\plugins.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -139,9 +139,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\Main.cpp" />
-    <ClCompile Include="..\plugins\html.cpp" />
-    <ClCompile Include="..\plugins\Interactive.cpp" />
-    <ClCompile Include="..\plugins\Tracer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\inc\DebugEngine.h" />
@@ -150,9 +147,6 @@
     <ClInclude Include="..\inc\Output.h" />
     <ClInclude Include="..\inc\Utils.h" />
     <ClInclude Include="..\inc\wow64.h" />
-    <ClInclude Include="..\plugins\html.h" />
-    <ClInclude Include="..\plugins\interactive.h" />
-    <ClInclude Include="..\plugins\Tracer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

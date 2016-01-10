@@ -57,7 +57,7 @@ public:
 	//Debugging the target
 	HRESULT GetCurrentFunctionName(const CONTEXT& context);
 	HRESULT GetProcessInfo(HANDLE hProcess);
-	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);
+	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack, int nFrames);
 	HRESULT GetRegisters(std::map<std::string, DWORD64> *mapRegisters);
 	HRESULT InsertBreakpoint(HANDLE hProcess, DWORD64 dw64Address);
 	HRESULT SetSingleStepFlag();

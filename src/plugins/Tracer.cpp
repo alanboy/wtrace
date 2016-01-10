@@ -132,15 +132,15 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 		m_DebugEngine->GetRegisters(&mapRegisters);
 
 		std::list<std::string> mapStack;
-		hr = m_DebugEngine->GetCurrentCallstack(&mapStack);
+		hr = m_DebugEngine->GetCurrentCallstack(&mapStack, 1);
 
 		if (!FAILED(hr) && !mapStack.empty())
 		{
-			auto it = mapStack.front();
+			auto it = mapStack.back();
 
 			if (it.compare(strLastFunction) != 0)
 			{
-				strLastFunction = it;
+				strLastFunction = std::string(it);
 
 #ifdef _X86_
 				std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
@@ -152,16 +152,13 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 
 				std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
 
-
-				for (auto it = mapStack.begin(); it != mapStack.end(); it++)
+				for (int a = mapStack.size(); a >= 0; a--)
 				{
 					std::cout << "  ";
 				}
 
-				std::cout << mapStack.back() << "()";
-				std::cout  << std::endl;
-
-				//		hr = m_DebugEngine->SetSingleStepFlag();
+				std::cout << strLastFunction << "()";
+				std::cout << std::endl;
 			}
 		}
 	}

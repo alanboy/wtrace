@@ -1105,7 +1105,7 @@ HRESULT DebugEngine::GetCurrentFunctionName(const CONTEXT& context)
 	std::wstring wsFuctionName;
 	std::list<std::string> mapStack;
 
-	hr = GetCurrentCallstack(&mapStack);
+	hr = GetCurrentCallstack(&mapStack, 256);
 
 	if (hr == HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND))
 	{
@@ -1137,7 +1137,7 @@ HRESULT DebugEngine::GetCurrentFunctionName(const CONTEXT& context)
 //	wtrace			amd64	amd64	x86		x86
 //	target			amd64	x86		x86		x86
 //
-HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
+HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack, int nFrames)
 {
 	ENTER_FN
 
@@ -1154,7 +1154,7 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 	DWORD64 dwOffsetFromSmybol = 0;
 	BOOL bResult = FALSE;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
-	int nFramesToRead = 256;
+	int nFramesToRead = nFrames;
 
 	DebugEngine::IsWowProcess(&bIsWow);
 

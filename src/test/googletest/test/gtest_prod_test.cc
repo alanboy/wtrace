@@ -34,86 +34,81 @@
 #define _UNICODE
 
 #include "gtest/gtest.h"
-//#include "test/production.h"
-
 #include <windows.h>
 #include "DebugEngine.h"
+#include "DebugEventCallback.h"
 #include "Output.h"
+#include "Tracer.h"
 
-/** Implement the following test cases */
-/*
+extern int gAnalysisLevel;
 
-.. test a binary that outputs to the debugger using: OutputDebugString 
-
-echo == == Test help menu
-bin\x86\wtrace.exe - ? > NUL
-if NOT ERRORLEVEL 0 goto failed
-
-echo == == Test amd64 on amd64 process leve tracing
-bin\x64\wtrace.exe - v info - a 3 "bin\x64\wtrace.exe -?" > NUL
-if NOT ERRORLEVEL 0 goto failed
-
-echo == == Test x86 on x86
-bin\x86\wtrace.exe - v info - a 3 "bin\x86\wtrace.exe -?" > NUL
-if NOT ERRORLEVEL 0 goto failed
-
-echo == == Test inbox binary(native)
-bin\x64\wtrace.exe "%windir%\system32\xcopy.exe /?" > NUL
-if NOT ERRORLEVEL 0 goto failed
-
-echo == == Test inbox binary(wow)
-bin\x64\wtrace.exe - v info "%windir%\syswow64\xcopy.exe /?" > NUL
-if NOT ERRORLEVEL 0 goto failed
-
-rem echo == == Test 2 levels deep(process that launches a process)
-rem bin\x64\wtrace.exe - v info "%windir%\syswow64\xcopy.exe /?" > NUL
-rem if NOT ERRORLEVEL 0 goto failed
-
-rem echo == == Test tracing with debugging information
-rem bin\x64\wtrace.exe - v debug - a 3 "bin\x86\wtrace.exe -?"
-rem if NOT ERRORLEVEL 0 goto failed
-rem
-rem echo == == Test function level tracing
-rem bin\x64\wtrace.exe - f - v info "bin\x64\wtrace.exe -?"
-rem if NOT ERRORLEVEL 0 goto failed
-rem
-rem echo == == Test html mode
-rem bin\x64\wtrace.exe - html - a 3 "bin\x86\wtrace.exe -?"
-rem if NOT ERRORLEVEL 0 goto failed
-
-echo == == Test interactive mode(simple)
-echo g | bin\x64\wtrace.exe - i "bin\x64\wtrace.exe -?" > NUL
-if NOT ERRORLEVEL 0 goto failed
-
-echo == == Test interactive mode(command line)
-bin\x64\wtrace.exe - i - c "kn;g;g;g;g;g;g" "bin\x64\wtrace.exe -?" > NUL
-if NOT ERRORLEVEL 0 goto failed
-
-echo All test passed.
-goto end
-
-*/
 GTEST_API_ int main(int argc, char **argv) {
 	printf("Running main() from gtest_main.cc\n");
 	testing::InitGoogleTest(&argc, argv);
 	return RUN_ALL_TESTS();
 }
 
-TEST(WtraceHelpTest, CanAccessPrivateMembers) {
+TEST(WtraceBasicTest, SimpleTest) {
 	DebugEngine engine;
 	gWriteLevelThreshold = WriteLevel::Debug;
 
-	std::wstring foo( L"C:\\Users\\alanb\\Code\\wtrace2\\wtrace\\bin.x86\\wtrace.exe");
-	wchar_t * pm = L"C:\\Users\\alanb\\Code\\wtrace2\\wtrace\\bin.x86\\wtrace.exe\0\0";
-
-	STARTUPINFOW si;
-	PROCESS_INFORMATION pi;
-	memset(&si, 0, sizeof(si));
-	memset(&pi, 0, sizeof(pi));
-
-	//CreateProcess(NULL, pm, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi);
-	
+	wchar_t * pm = L"wtrace.exe";
 	engine.SetCommandLine(pm);
 	engine.Run();
 }
+
+#ifdef _AMD64_
+TEST(TracerPlugin, amd64onamd64) {
+	DebugEngine engine;
+
+	//-v info -a 3
+	gWriteLevelThreshold = WriteLevel::Info;
+
+	TracerPlugin* tracerPlugin = NULL;
+	tracerPlugin = new TracerPlugin(&engine);
+	engine.AddCallback(tracerPlugin);
+	
+	wchar_t * pm = L"wtrace.exe -?";
+	engine.SetCommandLine(pm);
+	engine.Run();
+}
+#endif
+
+#ifdef _X86_
+TEST(WtraceBasicTest, x86onx86) {
+	//bin\x86\wtrace.exe - v info - a 3 "bin\x86\wtrace.exe -?" > NUL
+}
+#endif
+
+TEST(WtraceBasicTest, WindowsBinaryNative) {
+	//bin\x64\wtrace.exe "%windir%\system32\xcopy.exe /?" > NUL
+}
+
+TEST(WtraceBasicTest, WindowsBinaryWow) {
+	// bin\x64\wtrace.exe - v info "%windir%\syswow64\xcopy.exe /?" > NUL
+}
+
+TEST(WtraceBasicTest, 2processesDeep) {
+	//	rem bin\x64\wtrace.exe - v info "%windir%\syswow64\xcopy.exe /?" > NUL
+}
+
+TEST(WtraceBasicTest, TraceWithDebuggingInfo) {
+	//rem bin\x64\wtrace.exe - v debug - a 3 "bin\x86\wtrace.exe -?"
+	//rem echo == == Test function level tracing
+	//rem bin\x64\wtrace.exe - f - v info "bin\x64\wtrace.exe -?"
+}
+
+TEST(WtraceHtmlModeTest, SimpleCommand) {
+	//rem bin\x64\wtrace.exe - html - a 3 "bin\x86\wtrace.exe -?"
+}
+
+TEST(WtraceInteractiveModeTest, SimpleCommand) {
+	//echo g | bin\x64\wtrace.exe - i "bin\x64\wtrace.exe -?" > NUL
+}
+
+TEST(WtraceInteractiveModeTest, TestPassCommandsViaCOption) {
+	// bin\x64\wtrace.exe - i - c "kn;g;g;g;g;g;g" "bin\x64\wtrace.exe -?" > NUL
+}
+
+
 
