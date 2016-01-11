@@ -32,6 +32,7 @@ private:
 
 protected:
 	bool m_bSymInitialized;
+	bool m_bInUserCode = false; // true when running user-written code (not loader)
 	HANDLE m_hCurrentThread;
 	HANDLE m_hCurrentProcess;
 	CONTEXT m_hCurrentContext;
@@ -64,6 +65,8 @@ public:
 	HRESULT SetCommandLine(wchar_t *strCmd);
 	HRESULT Run();
 	HRESULT IsWowProcess(bool *bIsWow);
+
+	HRESULT IsPastFirstBreakPoint(bool *bIsPastFirstBp);
 };
 
 

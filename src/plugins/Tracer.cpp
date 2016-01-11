@@ -28,6 +28,13 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 
 	std::map<std::string, DWORD64> mapRegisters;
 
+	bool bPastFirstBp;
+	m_DebugEngine->IsPastFirstBreakPoint(&bPastFirstBp);
+	if (!bPastFirstBp)
+	{
+		return S_OK;
+	}
+
 	switch (event.dwDebugEventCode)
 	{
 		case EXCEPTION_DEBUG_EVENT:
@@ -151,11 +158,6 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 #endif
 
 				std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
-
-				for (int a = mapStack.size(); a >= 0; a--)
-				{
-					std::cout << "  ";
-				}
 
 				std::cout << strLastFunction << "()";
 				std::cout << std::endl;

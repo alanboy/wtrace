@@ -435,6 +435,11 @@ HRESULT DebugEngine::Run()
 
 	EXIT_FN
 }
+HRESULT DebugEngine::IsPastFirstBreakPoint(bool *bIsPastFirstBp)
+{
+	*bIsPastFirstBp = m_bInUserCode;
+	return S_OK;
+}
 
 HRESULT DebugEngine::IsWowProcess(bool *bIsWow)
 {
@@ -843,7 +848,7 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 		if (error != ERROR_SUCCESS)
 		{
 			hr = HRESULT_FROM_WIN32(error);
-			Write(WriteLevel::Error, L"SymLoadModuleEx failed 0x%x", error);
+			Write(WriteLevel::Error, L"CreateProcessDebugEvent: SymLoadModuleEx() failed 0x%x", error);
 			goto Exit;
 		}
 
@@ -1038,6 +1043,7 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 			if (element != m_mBreakpointsOriginalInstruction.end())
 			{
 				Write(WriteLevel::Info, L"Found a BP that I set!, %d", element->second);
+				m_bInUserCode = true;
 				SIZE_T lNumberOfBytesRead;
 
 				// Write back original instruction and remove BP from map
