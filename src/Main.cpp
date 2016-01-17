@@ -120,6 +120,12 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 			OutputDebugString(L"Some Text Sent Via OutputDebugString() \r\n");
 			*pfExitProgram = true;
 		}
+		else if (argv[i][0] == L'-' || argv[i][0] == L'/')
+		{
+			Write(WriteLevel::Output, L"Unknown option: %s", argv[i]);
+			*pfExitProgram = TRUE;
+			goto Exit;
+		}
 		else
 		{
 			size_t iTotalCharacters = 0;
@@ -138,6 +144,8 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 				StringCchCopy(gpCommandLine + iCurrentIndex + wcslen(argv[j]), sizeof(WCHAR), L" ");
 				iCurrentIndex += (wcslen(argv[j]) + 1);
 			}
+		}
+	}
 
 			break;
 		}
@@ -162,12 +170,12 @@ void WtraceUsage(void)
 	printf("\t\t\t\tg\n");
 	printf("\t\t\t\tkn\n");
 	printf("\t\t\t\tq\n");
-	
+
 	printf("\n\n Debugging:\n");
 	printf("\t-debugbreak\n");
 	printf("\t-createprocess  \n");
 	printf("\t-debugoutput \n");
-	
+
 }
 
 void Logo(void)
@@ -182,7 +190,7 @@ int wmain(int argc, wchar_t ** argv)
 	ENTER_FN;
 
 	Logo();
-	
+
 	gAnalysisLevel = 0;
 	bool fExitProgram = FALSE;
 
