@@ -17,6 +17,8 @@
 #include "DebugEngine.h"
 #include "wow64.h"
 
+#define TRACE(X) Write(WriteLevel::Info, L"TRACE: " X);
+
 TracerPlugin::TracerPlugin(DebugEngine * engine)
 {
 	m_DebugEngine = engine;
@@ -57,9 +59,7 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 				break;
 
 				case EXCEPTION_SINGLE_STEP:
-					//std::cout << "EXCEPTION_SINGLE_STEP" << std::endl;
 					hr = m_DebugEngine->SetSingleStepFlag();
-
 				break;
 
 				case DBG_CONTROL_C:
@@ -141,7 +141,13 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 		std::list<std::string> mapStack;
 		hr = m_DebugEngine->GetCurrentCallstack(&mapStack, 1);
 
-		if (!FAILED(hr) && !mapStack.empty())
+		if (FAILED(hr))
+		{
+			Write(WriteLevel::Error, L"0x%x", hr);
+			goto Exit;
+		}
+strLastFunction = "asf";
+		if (!mapStack.empty())
 		{
 			auto it = mapStack.back();
 
@@ -161,6 +167,15 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 
 				std::cout << strLastFunction << "()";
 				std::cout << std::endl;
+
+				//for (auto it = mapStack.begin(); it != mapStack.end(); it++)
+				//{
+				//	std::cout << "  ";
+				//}
+
+				//std::cout << mapStack.back() << "()";
+				//std::cout  << std::endl;
+
 			}
 		}
 	}

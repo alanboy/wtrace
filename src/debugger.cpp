@@ -274,9 +274,9 @@ HRESULT DebugEngine::Run()
 					break;
 
 					case DBG_CONTROL_C:
-					// First chance: Pass this on to the system. 
-					// Last chance: Display an appropriate error. 
-					Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
+						// First chance: Pass this on to the system. 
+						// Last chance: Display an appropriate error. 
+						Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
 					break;
 
 					case 0xc000001d:
@@ -358,7 +358,7 @@ HRESULT DebugEngine::Run()
 				break;
 
 			default:
-				// Handle other exceptions. 
+				// Handle other exceptions.
 				Write(WriteLevel::Debug, L"    nothing to do ? ");
 				break;
 
