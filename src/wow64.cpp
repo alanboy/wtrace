@@ -21,7 +21,6 @@
 #include "Utils.h"
 #include "Main.h"
 
-// Debugging engines
 #include "DebugEngine.h"
 #include "wow64.h"
 
@@ -50,104 +49,179 @@ HRESULT WowDebugEngine::SetStartAddress(DWORD64 startAddress)
 	return S_OK;
 }
 
-HRESULT WowDebugEngine::Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
+void WowDebugEngine::SetThreadAndProcessHandles(HANDLE hProcess, HANDLE hThread)
 {
-	ENTER_FN
+	m_hCurrentThread = hThread;
+	m_hCurrentProcess = hProcess;
+}
 
-	Write(WriteLevel::Info, L"WOW64 breakpoint");
+HRESULT WowDebugEngine::SetSingleStepFlag()
+{
+	ENTER_FN;
 
 	WOW64_CONTEXT lcWowContext = {0};
 	BOOL bResult = FALSE;
 
-	if (gAnalysisLevel >= 3)
+	lcWowContext.ContextFlags = WOW64_CONTEXT_CONTROL;
+
+	bResult = Wow64GetThreadContext(m_hCurrentThread, &lcWowContext);
+	if (!bResult)
 	{
-		lcWowContext.ContextFlags = WOW64_CONTEXT_CONTROL;
-
-		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
-		if (!bResult)
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
-			goto Exit;
-		}
-
-		hr = DumpWowContext(lcWowContext);
-
-		if (gbFirst)
-		{
-			gbFirst = FALSE;
-			/////////////////////////////////////////////////////////////////
-			// If this is our first time hitting WoW64 BreakPoint, set a BP
-			// at the start address 
-			
-			if (m_dw64StartAddress == 0)
-			{
-				Write(WriteLevel::Info, L"WOW64 m_dw64StartAddress is zero");
-				goto Exit;
-			}
-
-			// Read the first instruction and save it
-			BYTE cInstruction;
-			SIZE_T lpNumberOfBytesRead;
-			int result = ReadProcessMemory(
-					hProcess,
-					(void*)m_dw64StartAddress,
-					&cInstruction,
-					1,
-					&lpNumberOfBytesRead);
-
-			if (result == 0)
-			{
-				hr = HRESULT_FROM_WIN32(GetLastError());
-				Write(WriteLevel::Error, L"ReadProcessMemory failed to read 0x%p hr=0x%x", m_dw64StartAddress, hr);
-				goto Exit;
-			}
-			if (cInstruction != 0xCC)
-			{
-				Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, m_dw64StartAddress);
-
-				m_OriginalInstruction = cInstruction;
-
-				// Replace it with Breakpoint
-				cInstruction = 0xCC;
-
-				WriteProcessMemory(hProcess, (void*)m_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
-
-				FlushInstructionCache(hProcess, (void*)m_dw64StartAddress, 1);
-			}
-		}
-		else
-		{
-			/////////////////////////////////////////////////////////////////
-			// IF we are hitting a BP i set, restore the instruction
-			//
-			if (m_OriginalInstruction != 0)
-			{
-				Write(WriteLevel::Debug, L"Writing back original instruction ");
-
-				SIZE_T lNumberOfBytesRead;
-
-				lcWowContext.Eip--;
-				DWORD dwStartAddress;
-				dwStartAddress = lcWowContext.Eip;
-				WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
-				FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
-
-				m_OriginalInstruction = 0;
-
-				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-				lcWowContext.EFlags |= 0x100;
-
-				if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
-				{
-					hr =  HRESULT_FROM_WIN32(GetLastError());
-					Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
-					goto Exit;
-				}
-			}
-		}
-
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
+		goto Exit;
 	}
+
+	hr = DumpWowContext(lcWowContext);
+
+	Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+	lcWowContext.EFlags |= 0x100;
+
+	if (0 == Wow64SetThreadContext(m_hCurrentThread, &lcWowContext))
+	{
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
+		goto Exit;
+	}
+
+	EXIT_FN
+}
+
+
+HRESULT WowDebugEngine::GetRegisters(
+		std::map<std::string, DWORD64> *mapRegisters
+		)
+{
+	ENTER_FN
+
+	BOOL bResult = FALSE;
+
+	WOW64_CONTEXT lcWowContext = {0};
+
+	lcWowContext.ContextFlags = WOW64_CONTEXT_CONTROL;
+
+	bResult = Wow64GetThreadContext(m_hCurrentThread, &lcWowContext);
+	if (!bResult)
+	{
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
+		goto Exit;
+	}
+
+#define make_pair(X,Y) std::pair<std::string, DWORD64>(X, (DWORD64)Y)
+
+	mapRegisters->insert(make_pair("eax", lcWowContext.Eax));
+	mapRegisters->insert(make_pair("ebp", lcWowContext.Ebp));
+	mapRegisters->insert(make_pair("ebx", lcWowContext.Ebx));
+	mapRegisters->insert(make_pair("ecx", lcWowContext.Ecx));
+	mapRegisters->insert(make_pair("edi", lcWowContext.Edi));
+	mapRegisters->insert(make_pair("edx", lcWowContext.Edx));
+	mapRegisters->insert(make_pair("eflags" , lcWowContext.EFlags));
+	mapRegisters->insert(make_pair("eip", lcWowContext.Eip));
+	mapRegisters->insert(make_pair("esi", lcWowContext.Esi));
+	mapRegisters->insert(make_pair("esp", lcWowContext.Esp));
+
+	EXIT_FN
+}
+
+HRESULT WowDebugEngine::Wow64Breakpoint(HANDLE hProcess, HANDLE hThread)
+{
+	ENTER_FN
+
+	Write(WriteLevel::Debug, L"WOW64 Breakpoint");
+
+//	WOW64_CONTEXT lcWowContext = {0};
+//	BOOL bResult = FALSE;
+//
+//	if (gAnalysisLevel >= 3)
+//	{
+//		lcWowContext.ContextFlags = WOW64_CONTEXT_CONTROL;
+//
+//		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
+//		if (!bResult)
+//		{
+//			hr =  HRESULT_FROM_WIN32(GetLastError());
+//			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
+//			goto Exit;
+//		}
+//
+//		hr = DumpWowContext(lcWowContext);
+//
+//		if (gbFirst)
+//		{
+//			gbFirst = FALSE;
+//			/////////////////////////////////////////////////////////////////
+//			// If this is our first time hitting WoW64 BreakPoint, set a BP
+//			// at the start address 
+//			
+//			if (m_dw64StartAddress == 0)
+//			{
+//				Write(WriteLevel::Info, L"WOW64 m_dw64StartAddress is zero");
+//				goto Exit;
+//			}
+//
+//			// Read the first instruction and save it
+//			BYTE cInstruction;
+//			SIZE_T lpNumberOfBytesRead;
+//			int result = ReadProcessMemory(
+//					hProcess,
+//					(void*)m_dw64StartAddress,
+//					&cInstruction,
+//					1,
+//					&lpNumberOfBytesRead);
+//
+//			if (result == 0)
+//			{
+//				hr = HRESULT_FROM_WIN32(GetLastError());
+//				Write(WriteLevel::Error, L"ReadProcessMemory failed to read 0x%p hr=0x%x", m_dw64StartAddress, hr);
+//				goto Exit;
+//			}
+//			if (cInstruction != 0xCC)
+//			{
+//				Write(WriteLevel::Debug, L"Replacing first instruction '%x' at 0x%08x with 0xCC", cInstruction, m_dw64StartAddress);
+//
+//				m_OriginalInstruction = cInstruction;
+//
+//				// Replace it with Breakpoint
+//				cInstruction = 0xCC;
+//
+//				WriteProcessMemory(hProcess, (void*)m_dw64StartAddress, &cInstruction, 1, &lpNumberOfBytesRead);
+//
+//				FlushInstructionCache(hProcess, (void*)m_dw64StartAddress, 1);
+//			}
+//		}
+//		else
+//		{
+//			/////////////////////////////////////////////////////////////////
+//			// IF we are hitting a BP i set, restore the instruction
+//			//
+//			if (m_OriginalInstruction != 0)
+//			{
+//				Write(WriteLevel::Debug, L"Writing back original instruction ");
+//
+//				SIZE_T lNumberOfBytesRead;
+//
+//				lcWowContext.Eip--;
+//				DWORD dwStartAddress;
+//				dwStartAddress = lcWowContext.Eip;
+//				WriteProcessMemory(hProcess, (LPVOID)dwStartAddress, &m_OriginalInstruction, 1, &lNumberOfBytesRead);
+//				FlushInstructionCache(hProcess, (LPVOID)dwStartAddress, 1);
+//
+//				m_OriginalInstruction = 0;
+//
+//				Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+//				lcWowContext.EFlags |= 0x100;
+//
+//				if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
+//				{
+//					hr =  HRESULT_FROM_WIN32(GetLastError());
+//					Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
+//					goto Exit;
+//				}
+//			}
+//		}
+//
+//	}
 
 	EXIT_FN
 }
@@ -158,70 +232,96 @@ HRESULT WowDebugEngine::Wow64SingleStep(HANDLE hProcess, HANDLE hThread)
 
 	Write(WriteLevel::Debug, L"Wow64SingleStep");
 
-	WOW64_CONTEXT lcWowContext = {0};
-	BOOL bResult = FALSE;
-	m_hCurrentProcess = hProcess;
-	m_hCurrentThread = hThread;
-
-	if (gAnalysisLevel >= 3)
-	{
-		lcWowContext.ContextFlags = WOW64_CONTEXT_CONTROL;
-
-		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
-		if (!bResult)
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
-			goto Exit;
-		}
-
-		m_hCurrentContext = lcWowContext;
-		hr = DumpWowContext(lcWowContext);
-
-		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
-		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
-
-		if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
-		{
-			hr =  HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
-			goto Exit;
-		}
-
-		std::wstring wsFuctionName;
-		std::list<std::string> mapStack;
-		hr = GetCurrentCallstack(&mapStack);
-		if (FAILED(hr))
-		{
-			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
-			goto Exit;
-		}
-
-		if (!mapStack.empty())
-		{
-			wsFuctionName.assign(mapStack.back().begin(), mapStack.back().end());
-
-			Write(WriteLevel::Info, L" Thread=%x -> %s", 
-					hThread,
-					wsFuctionName.c_str());
-		}
-
-	}
+//	WOW64_CONTEXT lcWowContext = {0};
+//	BOOL bResult = FALSE;
+//	m_hCurrentProcess = hProcess;
+//	m_hCurrentThread = hThread;
+//
+//	if (gAnalysisLevel >= 3)
+//	{
+//		lcWowContext.ContextFlags = WOW64_CONTEXT_CONTROL;
+//
+//		bResult = Wow64GetThreadContext(hThread, &lcWowContext);
+//		if (!bResult)
+//		{
+//			hr =  HRESULT_FROM_WIN32(GetLastError());
+//			Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
+//			goto Exit;
+//		}
+//
+//		m_hCurrentContext = lcWowContext;
+//		hr = DumpWowContext(lcWowContext);
+//
+//		Write(WriteLevel::Debug, L"Set trap flag, which raises single-step exception");
+//		lcWowContext.EFlags |= 0x100; // Set trap flag, which raises "single-step" exception
+//
+//		if (0 == Wow64SetThreadContext(hThread, &lcWowContext))
+//		{
+//			hr =  HRESULT_FROM_WIN32(GetLastError());
+//			Write(WriteLevel::Error, L"Wow64SetThreadContext failed with 0x%x.", hr);
+//			goto Exit;
+//		}
+//
+//		std::wstring wsFuctionName;
+//		std::list<std::string> mapStack;
+//		hr = GetCurrentCallstack(&mapStack);
+//		if (FAILED(hr))
+//		{
+//			Write(WriteLevel::Error, L"GetCurrentFunctionName failed 0x%x", hr);
+//			goto Exit;
+//		}
+//
+//		if (!mapStack.empty())
+//		{
+//			wsFuctionName.assign(mapStack.back().begin(), mapStack.back().end());
+//
+//			Write(WriteLevel::Info, L" Thread=%x -> %s", 
+//					hThread,
+//					wsFuctionName.c_str());
+//		}
+//
+//	}
 
 	EXIT_FN
 }
 
-HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
+HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack, int nFrames)
 {
 	ENTER_FN
 
 	// Check for valid m_hCurrentProcess
+
+
+
+
+
+
+
+
+
+
 
 	STACKFRAME64 stack = {0};
 	std::string sModuleName;
 	bool bModuleFound = FALSE;
 	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
 	int nFramesToRead = 1;
+	BOOL bResult;
+
+	WOW64_CONTEXT lcWowContext = {0};
+
+	lcWowContext.ContextFlags = WOW64_CONTEXT_CONTROL;
+
+	bResult = Wow64GetThreadContext(m_hCurrentThread, &lcWowContext);
+	if (!bResult)
+	{
+		hr =  HRESULT_FROM_WIN32(GetLastError());
+		Write(WriteLevel::Error, L"Wow64GetThreadContext failed 0x%x", hr);
+		goto Exit;
+	}
+
+	m_hCurrentContext = lcWowContext;
+
 
 	// We can assume X86 registers
 	stack.AddrPC.Offset = m_hCurrentContext.Eip;    // EIP - Instruction Pointer
@@ -235,11 +335,11 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 
 	Write(WriteLevel::Debug, L"Eip = %p", (DWORD64)stack.AddrPC.Offset);
 
-	if (FALSE == m_bSymInitialized)
+	if (false == m_bSymInitialized)
 	{
 		Write(WriteLevel::Debug, L"SymInitialize on hProcess=0x%x ...", m_hCurrentProcess);
 
-		m_bSymInitialized = TRUE;
+		m_bSymInitialized = true;
 		BOOL bRes = SymInitialize(m_hCurrentProcess, NULL, TRUE);
 		if (FALSE == bRes)
 		{
@@ -386,7 +486,6 @@ HRESULT WowDebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack)
 			mapStack->push_front(sFunctionName);
 
 			hr = S_OK;
-			//goto Cleanup;
 		}
 
 		if (pSym)

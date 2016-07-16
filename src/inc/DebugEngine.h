@@ -22,7 +22,8 @@ private:
 	BYTE m_bOriginalInstruction;
 	DWORD m_dwProcessNameLen;
 	DWORD64 m_dw64StartAddress = 0;
-	bool m_bfirstDebugEvent = 1;
+	bool m_bfirstDebugEvent = true;
+	bool m_bIsWowProcess = false;
 	int m_iAnalysisLevel;
 	int m_iSpawnedProcess;
 	long m_lFunctionCalls = 0;
@@ -36,11 +37,10 @@ protected:
 	HANDLE m_hCurrentThread;
 	HANDLE m_hCurrentProcess;
 	CONTEXT m_hCurrentContext;
-	WOW64_CONTEXT m_hCurrentWoWContext;
+	WOW64_CONTEXT m_hCurrentWoWContext; // get rid of this, and move it to wowdebugengine
 
-private: 
-	WowDebugEngine *wow64engine;
-
+private:
+	WowDebugEngine * m_pWow64engine;
 	DebugEventCallback * m_pCallback = nullptr;
 
 	HRESULT CreateProcessDebugEvent(const DEBUG_EVENT& de);

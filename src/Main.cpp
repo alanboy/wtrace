@@ -40,7 +40,6 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 
 	if (argc <= 1)
 	{
-		WtraceUsage();
 		*pfExitProgram = TRUE;
 		goto Exit;
 	}
@@ -56,13 +55,16 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 		{
 			i++;
 
-			Write(WriteLevel::Debug, L"Set output file to %s.", argv[i]);
+			gOutputFile = (WCHAR*)malloc(sizeof(WCHAR)*wcslen(argv[i]));
+			StringCchCopy(gOutputFile, sizeof(WCHAR)*wcslen(argv[i]), argv[i]);
 
-			_wfopen_s(&gFp, argv[i], L"a");
+			Write(WriteLevel::Debug, L"Set output file to %s.", gOutputFile);
+
+			_wfopen_s(&gFp, argv[i], L"w");
 
 			if (!gFp)
 			{
-				Write(WriteLevel::Output, L"Unable to open %s for writing.", argv[i]);
+				Write(WriteLevel::Output, L"Unable to open %s for writing.", gOutputFile);
 			}
 		}
 		else if (CMPSTR(argv[i], L"-v"))
@@ -126,30 +128,10 @@ void ParseCommandLine(int argc, wchar_t ** argv, bool* pfExitProgram)
 			*pfExitProgram = TRUE;
 			goto Exit;
 		}
-		else
-		{
-			size_t iTotalCharacters = 0;
-			for (int j = i; j < argc; j++)
-			{
-				iTotalCharacters += wcslen(argv[j]);
-				iTotalCharacters++; // for whitespace
-			}
-			
-			//everything else is the command line to be debugged
-			gpCommandLine = (WCHAR*)malloc(sizeof(WCHAR) * iTotalCharacters);
-			size_t iCurrentIndex = 0;
-			for (int j = i; j < argc; j++)
-			{
-				StringCchCopy(gpCommandLine + iCurrentIndex, sizeof(WCHAR) * wcslen(argv[j]), argv[j]);
-				StringCchCopy(gpCommandLine + iCurrentIndex + wcslen(argv[j]), sizeof(WCHAR), L" ");
-				iCurrentIndex += (wcslen(argv[j]) + 1);
-			}
-		}
 	}
 
-			break;
-		}
-	}
+	// The last argument is the command line to trace
+	gpCommandLine = (argv[argc-1]);
 
 	EXIT_FN_NO_RET;
 }
@@ -182,7 +164,7 @@ void Logo(void)
 {
 	// @TODO put date here
 	//http://stackoverflow.com/questions/997946/how-to-get-current-time-and-date-in-c
-	printf("trace 0.0.0.2\n(c) 2013-2016 Alan Gonzalez\n\n");
+	printf("trace 0.0.0.2\n(c) 2013-2015 Alan Gonzalez\n\n");
 }
 
 int wmain(int argc, wchar_t ** argv)

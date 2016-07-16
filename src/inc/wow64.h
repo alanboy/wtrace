@@ -18,19 +18,21 @@
 class WowDebugEngine : public DebugEngine
 {
 private:
-	bool 			m_bSymInitialized;
-	DWORD64 		m_dw64StartAddress;
-	BYTE			m_OriginalInstruction;
-	BOOL			gbFirst = TRUE;
-	std::map<std::string, IMAGEHLP_MODULE64>	m_mLoadedModules;
-
+	bool m_bSymInitialized = false;
+	DWORD64 m_dw64StartAddress;
+	BYTE m_OriginalInstruction;
+	BOOL gbFirst = TRUE;
+	std::map<std::string, IMAGEHLP_MODULE64> m_mLoadedModules;
 	WOW64_CONTEXT m_hCurrentContext;
 
 public:
+	void SetThreadAndProcessHandles(HANDLE hProcess, HANDLE hThread);
 	HRESULT Wow64SingleStep(HANDLE hProcess, HANDLE hThread);
 	HRESULT Wow64Breakpoint(HANDLE hProcess, HANDLE hThread);
-	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack);
-	HRESULT WowDebugEngine::SetStartAddress(DWORD64 startAddress);
+	HRESULT GetCurrentCallstack(std::list<std::string> *mapStack, int nFrames);
+	HRESULT SetStartAddress(DWORD64 startAddress);
+	HRESULT SetSingleStepFlag();
+	HRESULT GetRegisters(std::map<std::string, DWORD64> *mapRegisters);
 };
 
 

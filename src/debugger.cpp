@@ -68,6 +68,13 @@ HRESULT DebugEngine::GetRegisters(
 {
 	ENTER_FN;
 
+	if (m_bIsWowProcess)
+	{
+		hr = m_pWow64engine->GetRegisters(mapRegisters);
+
+		EXIT
+	}
+
 	CONTEXT lcContext;
 	lcContext.ContextFlags = CONTEXT_ALL;
 
@@ -79,7 +86,7 @@ HRESULT DebugEngine::GetRegisters(
 		goto Exit;
 	}
 
-#define make_pair(X,Y) std::pair<std::string, DWORD64>(X, (DWORD64)Y) 
+#define make_pair(X,Y) std::pair<std::string, DWORD64>(X, (DWORD64)Y)
 
 #ifdef _X86_
 	mapRegisters->insert(make_pair("eax", lcContext.Eax));
@@ -181,7 +188,7 @@ HRESULT DebugEngine::Run()
 	PROCESS_INFORMATION pi;
 
 	// Architecture specific will be handled by these two:
-	wow64engine = new WowDebugEngine ;
+	m_pWow64engine = new WowDebugEngine ;
 
 	m_bSymInitialized = FALSE;
 	m_iSpawnedProcess = 0;
@@ -219,7 +226,7 @@ HRESULT DebugEngine::Run()
 	{
 		WaitForDebugEvent(&de, INFINITE);
 
-#if 0
+#if 1
 		Write( (m_pCallback != nullptr) ? WriteLevel::Debug : WriteLevel::Info,
 									L"EXCEPTION_DEBUG_EVENT "
 									L"(dwProcessId = 0x%08LX"
@@ -238,6 +245,8 @@ HRESULT DebugEngine::Run()
 		// only 1 process as this is right now.
 		m_hCurrentThread = pi.hThread;
 		m_hCurrentProcess = pi.hProcess;
+		m_pWow64engine->SetThreadAndProcessHandles(pi.hProcess, pi.hThread);
+
 		//m_hCurrentContext = nullptr;
 
 		switch (de.dwDebugEventCode)
@@ -274,9 +283,9 @@ HRESULT DebugEngine::Run()
 					break;
 
 					case DBG_CONTROL_C:
-						// First chance: Pass this on to the system. 
-						// Last chance: Display an appropriate error. 
-						Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
+					// First chance: Pass this on to the system. 
+					// Last chance: Display an appropriate error. 
+					Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
 					break;
 
 					case 0xc000001d:
@@ -288,14 +297,16 @@ HRESULT DebugEngine::Run()
 					//////////////////////////////////////////////
 					case STATUS_WX86_BREAKPOINT:
 						Write(WriteLevel::Info, L"STATUS_WX86_BREAKPOINT");
-						wow64engine->SetStartAddress(m_dw64StartAddress);
-						wow64engine->Wow64Breakpoint(pi.hProcess, pi.hThread);
+						m_bIsWowProcess = true;
+						m_pWow64engine->SetStartAddress(m_dw64StartAddress);
+						m_pWow64engine->Wow64Breakpoint(pi.hProcess, pi.hThread);
 					break;
 
 					case STATUS_WX86_SINGLE_STEP:
+						Write(WriteLevel::Info, L"STATUS_WX86_SINGLE_STEP");
 						// 0x4000001EL
 						// http://reverseengineering.stackexchange.com/questions/9313/opening-program-via-ollydbg-immunity-in-win7-causes-exception-unless-in-xp-compa
-						hr = wow64engine->Wow64SingleStep(pi.hProcess, pi.hThread);
+						hr = m_pWow64engine->Wow64SingleStep(pi.hProcess, pi.hThread);
 						if (FAILED(hr))
 						{
 							goto Exit;
@@ -358,7 +369,7 @@ HRESULT DebugEngine::Run()
 				break;
 
 			default:
-				// Handle other exceptions.
+				// Handle other exceptions. 
 				Write(WriteLevel::Debug, L"    nothing to do ? ");
 				break;
 
@@ -408,6 +419,7 @@ HRESULT DebugEngine::Run()
 				break;
 		}
 
+		// Call registered plugin
 		if (m_pCallback != nullptr)
 		{
 			m_pCallback->DebugEvent(de);
@@ -644,22 +656,19 @@ HRESULT DebugEngine::ExceptionSingleStep()
 
 	CONTEXT lcContext = {0};
 
-	//
-	// Wow has its own single step, this is always native 
-	//
 	if (gAnalysisLevel >= 3)
 	{
-		lcContext.ContextFlags = CONTEXT_ALL;
-
-		BOOL bResult = GetThreadContext(m_hCurrentThread, &lcContext);
-		if (!bResult)
-		{
-			hr = HRESULT_FROM_WIN32(GetLastError());
-			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
-			goto Exit;
-		}
-
-		DumpContext(lcContext);
+//		lcContext.ContextFlags = CONTEXT_ALL;
+//
+//		BOOL bResult = GetThreadContext(m_hCurrentThread, &lcContext);
+//		if (!bResult)
+//		{
+//			hr = HRESULT_FROM_WIN32(GetLastError());
+//			Write(WriteLevel::Error, L"GetThreadContext failed 0x%x", hr);
+//			goto Exit;
+//		}
+//
+//		DumpContext(lcContext);
 
 //		hr = GetCurrentFunctionName(hThread, hProcess, lcContext);
 //		Write(WriteLevel::Debug, L"GetCurrentFunctionName result 0x%x", hr);
@@ -961,6 +970,12 @@ HRESULT DebugEngine::SetSingleStepFlag()
 {
 	ENTER_FN;
 
+	if (m_bIsWowProcess)
+	{
+		hr = m_pWow64engine->SetSingleStepFlag();
+		EXIT
+	}
+
 	CONTEXT lcContext;
 	lcContext.ContextFlags = CONTEXT_ALL;
 
@@ -1002,7 +1017,7 @@ HRESULT DebugEngine::ExceptionBreakpoint(HANDLE hThread, HANDLE hProcess)
 	ENTER_FN
 
 	CONTEXT lcContext;
-	WOW64_CONTEXT lcWowContext = {0};
+	//WOW64_CONTEXT lcWowContext = {0};
 	DWORD64 dw64StartAddress;
 
 	lcContext.ContextFlags = CONTEXT_ALL;
@@ -1147,26 +1162,27 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack, int n
 {
 	ENTER_FN
 
+	BOOL bResult = FALSE;
+	DWORD64 dwOffsetFromSmybol = 0;
+	IMAGEHLP_SYMBOL64 *pSym = NULL;
+	STACKFRAME64 stack = { 0 };
+	int nFramesToRead = nFrames;
+	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
+	bool bIsWow;
+
 #ifdef _X86_
 	bool bIsWtraceX86 = true;
 #else
 	bool bIsWtraceX86 = false;
 #endif
 
-	bool bIsWow;
-
-	STACKFRAME64 stack = {0};
-	IMAGEHLP_SYMBOL64 *pSym = NULL;
-	DWORD64 dwOffsetFromSmybol = 0;
-	BOOL bResult = FALSE;
-	std::map<std::string, IMAGEHLP_MODULE64>::iterator it;
-	int nFramesToRead = nFrames;
-
 	DebugEngine::IsWowProcess(&bIsWow);
 
 	if (bIsWow)
 	{
 		Write(WriteLevel::Debug, L"Process is WoW");
+		hr = m_pWow64engine->GetCurrentCallstack(mapStack, 1);
+		EXIT
 	}
 
 	if (bIsWow && !bIsWtraceX86)
@@ -1233,7 +1249,6 @@ HRESULT DebugEngine::GetCurrentCallstack(std::list<std::string> *mapStack, int n
 
 		m_bSymInitialized = TRUE;
 	}
-
 
 	for (int frameNum = 0; (nFramesToRead ==0) || (frameNum < nFramesToRead); ++frameNum)
 	{

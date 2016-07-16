@@ -1,4 +1,4 @@
-/* ********************************************************** 
+/* **********************************************************
  *
  * wtrace
  * 2014 - 2015  Alan Gonzalez
@@ -28,14 +28,8 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 {
 	ENTER_FN;
 
-	std::map<std::string, DWORD64> mapRegisters;
-
 	bool bPastFirstBp;
 	m_DebugEngine->IsPastFirstBreakPoint(&bPastFirstBp);
-	if (!bPastFirstBp)
-	{
-		return S_OK;
-	}
 
 	switch (event.dwDebugEventCode)
 	{
@@ -51,15 +45,21 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 
 				case EXCEPTION_BREAKPOINT:
 					std::cout << "EXCEPTION_BREAKPOINT" << std::endl;
-					hr = m_DebugEngine->SetSingleStepFlag();
+					if (bPastFirstBp)
+					{
+						hr = m_DebugEngine->SetSingleStepFlag();
+					}
 				break;
 
-				case EXCEPTION_DATATYPE_MISALIGNMENT: 
+				case EXCEPTION_DATATYPE_MISALIGNMENT:
 					std::cout << "EXCEPTION_DATATYPE_MISALIGNMENT" << std::endl;
 				break;
 
 				case EXCEPTION_SINGLE_STEP:
-					hr = m_DebugEngine->SetSingleStepFlag();
+					if (bPastFirstBp)
+					{
+						hr = m_DebugEngine->SetSingleStepFlag();
+					}
 				break;
 
 				case DBG_CONTROL_C:
@@ -72,9 +72,11 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 				//				WOW Exceptions
 				//////////////////////////////////////////////
 				case STATUS_WX86_BREAKPOINT:
+					hr = m_DebugEngine->SetSingleStepFlag();
 				break;
 
 				case STATUS_WX86_SINGLE_STEP:
+					hr = m_DebugEngine->SetSingleStepFlag();
 				break;
 
 				case STATUS_WX86_UNSIMULATE:
@@ -101,31 +103,31 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 		default:
 			break;
 
-		 case CREATE_THREAD_DEBUG_EVENT: 
+		 case CREATE_THREAD_DEBUG_EVENT:
 					std::cout << "CREATE_THREAD_DEBUG_EVENT" << std::endl;
 			break;
 
-		 case CREATE_PROCESS_DEBUG_EVENT: 
+		 case CREATE_PROCESS_DEBUG_EVENT:
 					std::cout << "CREATE_PROCESS_DEBUG_EVENT" << std::endl;
 			break;
 
-		 case EXIT_THREAD_DEBUG_EVENT: 
+		 case EXIT_THREAD_DEBUG_EVENT:
 					std::cout << "EXIT_THREAD_DEBUG_EVENT" << std::endl;
 			break;
 
-		 case EXIT_PROCESS_DEBUG_EVENT: 
+		 case EXIT_PROCESS_DEBUG_EVENT:
 					std::cout << "EXIT_PROCESS_DEBUG_EVENT" << std::endl;
 			break;
 
-		 case LOAD_DLL_DEBUG_EVENT: 
+		 case LOAD_DLL_DEBUG_EVENT:
 					std::cout << "LOAD_DLL_DEBUG_EVENT" << std::endl;
 			break;
 
-		 case UNLOAD_DLL_DEBUG_EVENT: 
+		 case UNLOAD_DLL_DEBUG_EVENT:
 					std::cout << "UNLOAD_DLL_DEBUG_EVENT" << std::endl;
 			break;
 
-		 case OUTPUT_DEBUG_STRING_EVENT: 
+		 case OUTPUT_DEBUG_STRING_EVENT:
 					std::cout << "OUTPUT_DEBUG_STRING_EVENT" << std::endl;
 			break;
 
@@ -133,50 +135,89 @@ HRESULT TracerPlugin::DebugEvent(const DEBUG_EVENT& event)
 			break;
 	}
 
-	if (event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
-			&& event.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP)
+	if (event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT)
 	{
-		m_DebugEngine->GetRegisters(&mapRegisters);
-
-		std::list<std::string> mapStack;
-		hr = m_DebugEngine->GetCurrentCallstack(&mapStack, 1);
-
-		if (FAILED(hr))
+		// <<<<<<< 9c368c56410c8bba0f11ad3cc96ae254f3937bbd
+		// 		m_DebugEngine->GetRegisters(&mapRegisters);
+		// 
+		// 		std::list<std::string> mapStack;
+		// 		hr = m_DebugEngine->GetCurrentCallstack(&mapStack, 1);
+		// 
+		// 		if (FAILED(hr))
+		// 		{
+		// 			Write(WriteLevel::Error, L"0x%x", hr);
+		// 			goto Exit;
+		// 		}
+		//         strLastFunction = "asf";
+		// 		if (!mapStack.empty())
+		// =======
+		if (event.u.Exception.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP)
 		{
-			Write(WriteLevel::Error, L"0x%x", hr);
-			goto Exit;
-		}
-strLastFunction = "asf";
-		if (!mapStack.empty())
-		{
-			auto it = mapStack.back();
+			std::map<std::string, DWORD64> mapRegisters;
+			m_DebugEngine->GetRegisters(&mapRegisters);
 
-			if (it.compare(strLastFunction) != 0)
+			std::list<std::string> mapStack;
+			hr = m_DebugEngine->GetCurrentCallstack(&mapStack, 1);
+
+			if (!FAILED(hr) && !mapStack.empty())
 			{
-				strLastFunction = std::string(it);
+				auto it = mapStack.back();
+
+				if (it.compare(strLastFunction) != 0)
+				{
+					strLastFunction = std::string(it);
 
 #ifdef _X86_
-				std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
-				std::cout << "esp=0x" << std::hex << mapRegisters.at("esp") << " ";
+					std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
+					std::cout << "esp=0x" << std::hex << mapRegisters.at("esp") << " ";
 #else
-				std::cout << "rip=0x" << std::hex << mapRegisters.at("rip") << " ";
-				std::cout << "rsp=0x" << std::hex << mapRegisters.at("rsp") << " ";
+					std::cout << "rip=0x" << std::hex << mapRegisters.at("rip") << " ";
+					std::cout << "rsp=0x" << std::hex << mapRegisters.at("rsp") << " ";
 #endif
 
-				std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
+					std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
 
-				std::cout << strLastFunction << "()";
-				std::cout << std::endl;
-
-				//for (auto it = mapStack.begin(); it != mapStack.end(); it++)
-				//{
-				//	std::cout << "  ";
-				//}
-
-				//std::cout << mapStack.back() << "()";
-				//std::cout  << std::endl;
-
+					std::cout << strLastFunction << "()";
+					std::cout << std::endl;
+				}
 			}
+		}
+		else if (event.u.Exception.ExceptionRecord.ExceptionCode == STATUS_WX86_SINGLE_STEP)
+		{
+			std::map<std::string, DWORD64> mapRegisters;
+			m_DebugEngine->GetRegisters(&mapRegisters);
+
+			std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
+			std::cout << "esp=0x" << std::hex << mapRegisters.at("esp") << " ";
+
+			std::list<std::string> mapStack;
+			hr = m_DebugEngine->GetCurrentCallstack(&mapStack, 1);
+
+			std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
+
+			if (!FAILED(hr) && !mapStack.empty())
+			{
+				auto it = mapStack.back();
+
+				if (it.compare(strLastFunction) != 0)
+				{
+					strLastFunction = std::string(it);
+
+//#ifdef _X86_
+//					std::cout << "eip=0x" << std::hex << mapRegisters.at("eip") << " ";
+//					std::cout << "esp=0x" << std::hex << mapRegisters.at("esp") << " ";
+//#else
+//					std::cout << "rip=0x" << std::hex << mapRegisters.at("rip") << " ";
+//					std::cout << "rsp=0x" << std::hex << mapRegisters.at("rsp") << " ";
+//#endif
+
+//					std::cout << "tid=0x" << std::hex << event.dwThreadId << " ";
+
+					std::cout << strLastFunction << "()";
+				}
+			}
+
+			std::cout << std::endl;
 		}
 	}
 

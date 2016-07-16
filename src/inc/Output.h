@@ -17,6 +17,10 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...);
 
 #define WIDE2(x) L##x
 #define WIDE1(x) WIDE2(x)
+
+#define EXIT \
+			goto Exit;
+
 #define ENTER_FN \
 			dFunctionDepth++; \
 			Write(WriteLevel::Debug, L"ENTERING FUNCTION " WIDE1(__FUNCTION__)); \

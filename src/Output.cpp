@@ -83,7 +83,7 @@ void Write(WriteLevel level, const WCHAR * lineFormat, ...)
 			int i = dFunctionDepth-1;
 			while ((gWriteLevelThreshold == WriteLevel::Debug) && (i-->0))
 			{
-				printf("\t");
+				printf("  ");
 			}
 
 			vwprintf(lineFormat, lineArgs);

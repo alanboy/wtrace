@@ -61,7 +61,6 @@ TEST(WtraceBasicTest, SimpleTest) {
 TEST(TracerPlugin, amd64onamd64) {
 	DebugEngine engine;
 
-	//-v info -a 3
 	gWriteLevelThreshold = WriteLevel::Info;
 
 	TracerPlugin* tracerPlugin = NULL;
@@ -69,6 +68,20 @@ TEST(TracerPlugin, amd64onamd64) {
 	engine.AddCallback(tracerPlugin);
 	
 	wchar_t * pm = L"wtrace.exe -?";
+	engine.SetCommandLine(pm);
+	engine.Run();
+}
+
+TEST(TracerPlugin, x86onamd64) {
+	DebugEngine engine;
+
+	gWriteLevelThreshold = WriteLevel::Info;
+
+	TracerPlugin* tracerPlugin = NULL;
+	tracerPlugin = new TracerPlugin(&engine);
+	engine.AddCallback(tracerPlugin);
+
+	wchar_t * pm = L"../bin.x86/wtrace.exe -?";
 	engine.SetCommandLine(pm);
 	engine.Run();
 }
