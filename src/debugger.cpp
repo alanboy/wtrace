@@ -212,9 +212,9 @@ HRESULT DebugEngine::Run()
 	}
 
 	Write(WriteLevel::Debug, L"CreateProcess OK: "
-									L"(hProcess = 0x%08LX"
-									L" hThread = 0x%08LX"
-									L" dwProcessId = 0x%08LX)",
+									L"(hProcess = 0x%08x"
+									L" hThread = 0x%08x"
+									L" dwProcessId = 0x%08x)",
 									pi.hProcess,
 									pi.hThread,
 									pi.dwProcessId);
@@ -226,13 +226,13 @@ HRESULT DebugEngine::Run()
 	{
 		WaitForDebugEvent(&de, INFINITE);
 
-#if 1
+#if 0
 		Write( (m_pCallback != nullptr) ? WriteLevel::Debug : WriteLevel::Info,
 									L"EXCEPTION_DEBUG_EVENT "
-									L"(dwProcessId = 0x%08LX"
-									L" dwThreadId = 0x%08LX"
-									L" hThread = 0x%08LX"
-									L" dwDebugEventCode = 0x%08LX %s %x)",
+									L"(dwProcessId = 0x%08x"
+									L" dwThreadId = 0x%08x"
+									L" hThread = 0x%08x"
+									L" dwDebugEventCode = 0x%x %s %x)",
 									de.dwProcessId,
 									de.dwThreadId,
 									pi.hThread,
@@ -261,6 +261,7 @@ HRESULT DebugEngine::Run()
 					case EXCEPTION_ACCESS_VIOLATION:
 						// First chance: Pass this on to the system. 
 						// Last chance: Display an appropriate error. 
+						Write(WriteLevel::Info, L"EXCEPTION_ACCESS_VIOLATION");
 						ExceptionAccessViolation(pi.hProcess, pi.hThread, de.u.Exception.ExceptionRecord);
 					break;
 
@@ -283,13 +284,13 @@ HRESULT DebugEngine::Run()
 					break;
 
 					case DBG_CONTROL_C:
-					// First chance: Pass this on to the system. 
-					// Last chance: Display an appropriate error. 
-					Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
+						// First chance: Pass this on to the system. 
+						// Last chance: Display an appropriate error. 
+						Write(WriteLevel::Debug, L"\tDBG_CONTROL_C");
 					break;
 
-					case 0xc000001d:
-					Write(WriteLevel::Debug, L"\tIllegal Instruction  An attempt was made to execute an illegal instruction.");
+					case EXCEPTION_ILLEGAL_INSTRUCTION://0xc000001d:
+						Write(WriteLevel::Debug, L"EXCEPTION_ILLEGAL_INSTRUCTION: Illegal Instruction  An attempt was made to execute an illegal instruction.");
 					break;
 
 					//////////////////////////////////////////////
@@ -382,6 +383,7 @@ HRESULT DebugEngine::Run()
 				break;
 
 			 case CREATE_PROCESS_DEBUG_EVENT: 
+				Write(WriteLevel::Info, L"CREATE_PROCESS_DEBUG_EVENT");
 				CreateProcessDebugEvent(de);
 				break;
 
@@ -425,7 +427,7 @@ HRESULT DebugEngine::Run()
 			m_pCallback->DebugEvent(de);
 		}
 
-		hr = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
+		hr = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_EXCEPTION_NOT_HANDLED); // Alternatively DBG_CONTINUE
 		if(FAILED(hr))
 		{
 			Write(WriteLevel::Error, L"Error.");
@@ -794,9 +796,9 @@ HRESULT DebugEngine::CreateProcessDebugEvent(const DEBUG_EVENT& de)
 	LPWSTR processName = new WCHAR[MAX_PATH];
 
 	Write(WriteLevel::Debug, L"CREATE_PROCESS_DEBUG_INFO = {"
-			L"hFile=0x%08LX"
-			L" hProcess=0x%08LX"
-			L" hThread=0x%08LX",
+			L"hFile=0x%08x"
+			L" hProcess=0x%08x"
+			L" hThread=0x%08x",
 			pCreateProcessDebugInfo->hFile,
 			pCreateProcessDebugInfo->hProcess,
 			pCreateProcessDebugInfo->hThread);
